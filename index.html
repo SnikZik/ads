@@ -1,109 +1,534 @@
 <!DOCTYPE html>
 <html lang="he" dir="rtl">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>שניר</title>
-  <style>
-    * {
-      margin: 0;
-      padding: 0;
-      box-sizing: border-box;
-    }
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SNIR. · מערך צמיחה דיגיטלי שסוגר לולאות</title>
+  <meta name="description" content="SNIR. — אסטרטגיה, אוטומציה, AI ותשתיות דאטה. בונה, מנהל ומייעל את מערך הצמיחה הדיגיטלי. כל שקל במדיה עובד בתהליך מסודר, מדיד ורווחי.">
+  <meta name="theme-color" content="#F5F2EC">
 
-    body {
-      font-family: 'Segoe UI', Arial, sans-serif;
-      background: #f9f9f9;
-      color: #1a1a1a;
-      min-height: 100vh;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      padding: 2rem;
-    }
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=Archivo:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
 
-    .container {
-      max-width: 600px;
-      width: 100%;
-      text-align: center;
-    }
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%23F5F2EC'/%3E%3Crect x='20' y='18' width='8' height='8' fill='%234B2BE0'/%3E%3C/svg%3E">
 
-    .avatar {
-      width: 100px;
-      height: 100px;
-      border-radius: 50%;
-      background: #1a1a1a;
-      color: #f9f9f9;
-      font-size: 2.5rem;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      margin: 0 auto 2rem;
-    }
-
-    h1 {
-      font-size: 2.5rem;
-      font-weight: 700;
-      margin-bottom: 0.5rem;
-      letter-spacing: -0.5px;
-    }
-
-    .tagline {
-      font-size: 1.1rem;
-      color: #666;
-      margin-bottom: 3rem;
-    }
-
-    .divider {
-      width: 40px;
-      height: 2px;
-      background: #1a1a1a;
-      margin: 0 auto 3rem;
-    }
-
-    .links {
-      display: flex;
-      flex-direction: column;
-      gap: 1rem;
-    }
-
-    .link-btn {
-      display: block;
-      padding: 1rem 2rem;
-      border: 1.5px solid #1a1a1a;
-      border-radius: 8px;
-      text-decoration: none;
-      color: #1a1a1a;
-      font-size: 1rem;
-      font-weight: 500;
-      transition: background 0.15s, color 0.15s;
-    }
-
-    .link-btn:hover {
-      background: #1a1a1a;
-      color: #f9f9f9;
-    }
-
-    footer {
-      margin-top: 4rem;
-      font-size: 0.8rem;
-      color: #aaa;
-    }
-  </style>
+  <meta property="og:title" content="SNIR. · מערך צמיחה דיגיטלי שסוגר לולאות">
+  <meta property="og:description" content="אסטרטגיה. אוטומציה. AI. דאטה. הכל ברור כשמש.">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://snir.studio">
 </head>
 <body>
-  <div class="container">
-    <div class="avatar">ש</div>
-    <h1>alallalalalala</h1>
-    <p class="tagline">alallalalalala</p>
-    <div class="divider"></div>
-    <div class="links">
-      <a href="#" class="link-btn">alallalalalala</a>
-      <a href="#" class="link-btn">alallalalalala</a>
-      <a href="#" class="link-btn">alallalalalala</a>
+
+  <!-- ====================================================================
+       Topbar
+       ==================================================================== -->
+  <header class="topbar" role="banner">
+    <a href="#top" class="wordmark" aria-label="SNIR — לדף הבית">SNIR<span class="stop" aria-hidden="true"></span></a>
+    <nav aria-label="ניווט ראשי">
+      <a href="#proof">מספרים</a>
+      <a href="#process">תהליך</a>
+      <a href="#cases">תוצאות</a>
+      <a href="#systems">מערכות</a>
+      <a href="#contact">צור קשר</a>
+    </nav>
+  </header>
+
+  <main id="top">
+
+    <!-- ==================================================================
+         01 · Hero
+         ================================================================== -->
+    <section class="hero wrap" id="hero" aria-labelledby="hero-headline">
+      <div class="section-meta"><span>[ 01 / Hero ]</span></div>
+
+      <div class="hero-grid">
+        <div>
+          <span class="hero-mark wordmark" aria-hidden="true">SNIR<span class="stop"></span></span>
+
+          <div class="hero-pitch">
+            <p class="first" id="hero-headline">
+              אני בונה, מנהל ומייעל את מערך הצמיחה הדיגיטלי שלכם.
+            </p>
+
+            <p>
+              החל מתכנון אסטרטגיה, אוטומציה ותשתיות דאטה שמחברות בין מדיה, מכירות ורווחיות אמיתית, ועד לבניה וניהול מערכת שיווק מלאה.
+            </p>
+
+            <p>
+              תקבלו מערכת שמחברת בין אסטרטגיה, ביצוע, אוטומציה ודאטה, כך שכל שקל במדיה עובד בתוך תהליך מסודר, מדיד ורווחי.
+            </p>
+
+            <p class="closer">
+              והכי חשוב, הכל ברור כשמש.
+            </p>
+          </div>
+
+          <ul class="checks" aria-label="יכולות עיקריות">
+            <li><span class="tick" aria-hidden="true">✓</span><span>אסטרטגיה ובניית מערך מקצה לקצה</span></li>
+            <li><span class="tick" aria-hidden="true">✓</span><span>AI ואוטומציות לכל תהליך שחוזר על עצמו</span></li>
+            <li><span class="tick" aria-hidden="true">✓</span><span>שיפוט שעמד במבחן ההשקעה</span></li>
+          </ul>
+
+          <a href="#contact" class="btn">בוא נסגור לולאה <span class="arrow">→</span></a>
+        </div>
+
+        <aside class="hero-form" aria-label="טופס יצירת קשר מהיר">
+          <h3>תגיד לי על העסק שלך.</h3>
+          <p class="mono" style="margin-bottom: 0.5rem">תשובה תוך 24 שעות. אם הכימיה עובדת, נמשיך.</p>
+
+          <form action="mailto:hello@snir.studio" method="post" enctype="text/plain" class="quick-form">
+            <div class="field">
+              <label for="qf-name">שם</label>
+              <input type="text" id="qf-name" name="שם" required autocomplete="name">
+            </div>
+            <div class="field">
+              <label for="qf-phone">טלפון</label>
+              <input type="tel" id="qf-phone" name="טלפון" required autocomplete="tel">
+            </div>
+            <div class="field">
+              <label for="qf-email">מייל</label>
+              <input type="email" id="qf-email" name="מייל" required autocomplete="email">
+            </div>
+            <div class="field">
+              <label for="qf-budget">תקציב מדיה חודשי</label>
+              <select id="qf-budget" name="תקציב">
+                <option value="">בחר טווח</option>
+                <option value="0-10k">עד ₪10K</option>
+                <option value="10-50k">₪10K – ₪50K</option>
+                <option value="50-200k">₪50K – ₪200K</option>
+                <option value="200k+">₪200K ומעלה</option>
+              </select>
+            </div>
+            <button type="submit" class="btn">שליחה</button>
+          </form>
+        </aside>
+      </div>
+    </section>
+
+    <!-- ==================================================================
+         02 · Proof / Stats
+         ================================================================== -->
+    <section class="wrap" id="proof" aria-labelledby="proof-headline">
+      <div class="section-meta"><span>[ 02 / Proof ]</span></div>
+
+      <h1 id="proof-headline">המספרים מדברים.</h1>
+
+      <div class="proof-grid">
+        <div class="stat">
+          <span class="num">12<small style="font-size:0.45em">+</small></span>
+          <span class="label">שנים בשיווק דיגיטלי</span>
+        </div>
+        <div class="stat">
+          <span class="num">17</span>
+          <span class="label">לקוחות פעילים היום</span>
+        </div>
+        <div class="stat">
+          <span class="num">₪1M<small style="font-size:0.45em">+</small></span>
+          <span class="label">תקציבי מדיה לחודש</span>
+        </div>
+        <div class="stat">
+          <span class="num">8<small style="font-size:0.45em">×</small></span>
+          <span class="label">ROAS כשהמתמטיקה מצדיקה</span>
+        </div>
+      </div>
+
+      <p class="proof-closer">שיפוט שעמד במבחן ההשקעה.</p>
+    </section>
+
+    <!-- ==================================================================
+         03 · AI · Automation declaration
+         ================================================================== -->
+    <section class="declare" id="ai" aria-labelledby="ai-headline">
+      <div class="wrap">
+        <div class="declare-meta"><span>[ 03 / AI · Automation ]</span></div>
+
+        <h2 class="declare-text" id="ai-headline">
+          כל מה שחוזר על עצמו<br>
+          אני בונה אותו <span class="accent">לבד.</span>
+        </h2>
+
+        <p style="font-size:1.1rem;line-height:1.6;color:rgba(245,242,236,0.78);max-width:55ch;margin-top:2rem">
+          סוכני AI שמנתחים, מחליטים ומבצעים. אוטומציות שמחברות מערכות שלא דיברו ביניהן. תשתיות דאטה שהופכות החלטות מתחושות לחשבון. שעות עבודה שחוסכים לעצמכם, ולתוצאות שאתם רואים בסוף החודש.
+        </p>
+      </div>
+    </section>
+
+    <!-- ==================================================================
+         04 · What gets built
+         ================================================================== -->
+    <section class="wrap" id="capabilities" aria-labelledby="cap-headline">
+      <div class="section-meta"><span>[ 04 / What Gets Built ]</span></div>
+
+      <h1 id="cap-headline">שלושה כיוונים.</h1>
+
+      <div class="builds">
+        <div class="build">
+          <span class="num">01 / Growth</span>
+          <h3>ארכיטקטורת צמיחה</h3>
+          <p>
+            אסטרטגיה, מדיה, מכירות. הכל מחובר. כל שקל יודע מה התפקיד שלו, ולמה הוא נמדד. תכנון של הצמיחה — לא תקווה ל-ROAS.
+          </p>
+        </div>
+        <div class="build">
+          <span class="num">02 / Systems</span>
+          <h3>מערכות שעובדות</h3>
+          <p>
+            אוטומציות, תשתיות דאטה, חיבור בין כלים. מערכות שלא צריכות אותך כדי לרוץ. ראייה אחת על כל המערך — לא 12 דשבורדים שאף אחד לא פותח.
+          </p>
+        </div>
+        <div class="build">
+          <span class="num">03 / AI Ops</span>
+          <h3>סוכנים שמבצעים</h3>
+          <p>
+            סוכני AI שמחקים את העבודה שלך. מאבחנים, מקבלים החלטות, פותחים קמפיינים, כותבים תוכן, סוגרים לולאות. אתה מפקח, הם עובדים.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ==================================================================
+         05 · Process
+         ================================================================== -->
+    <section class="wrap" id="process" aria-labelledby="proc-headline">
+      <div class="section-meta"><span>[ 05 / Process ]</span></div>
+
+      <h1 id="proc-headline">ארבעה שלבים. סוגרים לולאה.</h1>
+
+      <div class="process">
+        <div class="step">
+          <span class="step-num">01</span>
+          <h3>אבחון</h3>
+          <p>אנליזה עמוקה של הפלטפורמות, הקמפיינים, הדאטה, המסע. מה עובד. מה דולף. איפה הפוטנציאל החבוי.</p>
+        </div>
+        <div class="step">
+          <span class="step-num">02</span>
+          <h3>אסטרטגיה</h3>
+          <p>תוכנית שמראה מאיפה הצמיחה תגיע. מספרים, לא הבטחות. תחזית לרבעון הבא, לא תקווה.</p>
+        </div>
+        <div class="step">
+          <span class="step-num">03</span>
+          <h3>ביצוע</h3>
+          <p>בונה, מקים, מחבר. קמפיינים חיים, אירועים מוגדרים, אוטומציות רצות, AI עובד ברקע.</p>
+        </div>
+        <div class="step">
+          <span class="step-num">04</span>
+          <h3>אופטימיזציה</h3>
+          <p>יומיומי, לא רבעוני. כל שקל נמדד. כל החלטה מבוססת. כל לולאה נסגרת.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ==================================================================
+         06 · Metrics that matter
+         ================================================================== -->
+    <section class="wrap" id="metrics" aria-labelledby="metrics-headline">
+      <div class="section-meta"><span>[ 06 / Metrics ]</span></div>
+
+      <h1 id="metrics-headline">מדדים שחשובים.</h1>
+
+      <p style="margin-top:1rem;color:var(--ink-soft)">
+        לא views, לא likes, לא reach. מה שמזיז את העסק.
+      </p>
+
+      <div class="metrics">
+        <div class="metric">
+          <span class="arrow">↓</span>
+          <span class="key">CAC</span>
+          <span class="desc">עלות גיוס לקוח. נמוכה ככל האפשר, יציבה ככל שהמערכת בשלה.</span>
+        </div>
+        <div class="metric">
+          <span class="arrow">↑</span>
+          <span class="key">MER%</span>
+          <span class="desc">יחס יעילות שיווק. כמה כסף נכנס לכל שקל שיוצא — על כל הערוצים יחד.</span>
+        </div>
+        <div class="metric">
+          <span class="arrow">↑</span>
+          <span class="key">CLV</span>
+          <span class="desc">ערך חיי לקוח. מה שלקוח באמת שווה לאורך זמן, לא רק בעסקה ראשונה.</span>
+        </div>
+        <div class="metric">
+          <span class="arrow">↑</span>
+          <span class="key">ROAS</span>
+          <span class="desc">החזר על השקעה במדיה. גבוה כשהמתמטיקה מצדיקה — לא גבוה רק לפרוטוקול.</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- ==================================================================
+         07 · Case studies
+         ================================================================== -->
+    <section class="wrap" id="cases" aria-labelledby="cases-headline">
+      <div class="section-meta"><span>[ 07 / Cases ]</span></div>
+
+      <h1 id="cases-headline">תוצאות, לא הבטחות.</h1>
+
+      <div class="cases">
+        <article class="case">
+          <header class="case-header">
+            <span class="case-name">לקוח · TBD</span>
+            <span class="case-tag">E-Commerce</span>
+          </header>
+          <h3>סיפור הצלחה ראשון יושלם בקרוב.</h3>
+          <div class="case-stats">
+            <div class="case-stat">
+              <span class="num">+0%</span>
+              <span class="label">ROAS</span>
+            </div>
+            <div class="case-stat">
+              <span class="num">+0%</span>
+              <span class="label">הכנסות</span>
+            </div>
+          </div>
+        </article>
+
+        <article class="case">
+          <header class="case-header">
+            <span class="case-name">לקוח · TBD</span>
+            <span class="case-tag">Lead Gen</span>
+          </header>
+          <h3>סיפור הצלחה שני יושלם בקרוב.</h3>
+          <div class="case-stats">
+            <div class="case-stat">
+              <span class="num">−0%</span>
+              <span class="label">CAC</span>
+            </div>
+            <div class="case-stat">
+              <span class="num">+0%</span>
+              <span class="label">לידים</span>
+            </div>
+          </div>
+        </article>
+
+        <article class="case">
+          <header class="case-header">
+            <span class="case-name">לקוח · TBD</span>
+            <span class="case-tag">SaaS</span>
+          </header>
+          <h3>סיפור הצלחה שלישי יושלם בקרוב.</h3>
+          <div class="case-stats">
+            <div class="case-stat">
+              <span class="num">+0%</span>
+              <span class="label">MER</span>
+            </div>
+            <div class="case-stat">
+              <span class="num">+0%</span>
+              <span class="label">CLV</span>
+            </div>
+          </div>
+        </article>
+      </div>
+
+      <p class="mono" style="margin-top:2rem;font-size:12px">
+        [ ממתין · 3 case studies מאומתים מהלקוחות שלך ]
+      </p>
+    </section>
+
+    <!-- ==================================================================
+         08 · Systems · the three entries
+         ================================================================== -->
+    <section class="wrap" id="systems" aria-labelledby="sys-headline">
+      <div class="section-meta"><span>[ 08 / Systems ]</span></div>
+
+      <h1 id="sys-headline">שלוש מערכות. כניסה אחת.</h1>
+
+      <p style="margin-top:1rem;color:var(--ink-soft);max-width:55ch">
+        המוצרים של SNIR. — מערכות שאני משתמש בהן בעצמי, ופותח לכל מי שרוצה.
+      </p>
+
+      <div class="systems">
+        <a class="system" href="#" aria-disabled="true" aria-label="מערכת אורגני · בקרוב">
+          <span class="system-num">[ 01 / Organic ]</span>
+          <span class="status-tag">בקרוב</span>
+          <h3>מערכת אורגני</h3>
+          <p class="desc">מאמרי SEO ברמה הגבוהה ביותר. אוטומטי לוורדפרס. ציון Yoast ירוק. מוכן ל-AI search.</p>
+          <span class="arrow" aria-hidden="true">→</span>
+        </a>
+
+        <a class="system" href="#" aria-disabled="true" aria-label="מערכת סוכנים · בקרוב">
+          <span class="system-num">[ 02 / Agents ]</span>
+          <span class="status-tag">בקרוב</span>
+          <h3>מערכת סוכנים</h3>
+          <p class="desc">11 סוכני AI שמנהלים את הקמפיינים שלך. מהבריף ועד האופטימיזציה היומית. אתה מפקח, הם עובדים.</p>
+          <span class="arrow" aria-hidden="true">→</span>
+        </a>
+
+        <a class="system" href="#" aria-disabled="true" aria-label="מערכת ניהול · בקרוב">
+          <span class="system-num">[ 03 / Admin ]</span>
+          <span class="status-tag">בקרוב</span>
+          <h3>מערכת ניהול</h3>
+          <p class="desc">שליטה מלאה על כל המערך. כל הלקוחות, כל הסוכנים, כל המאמרים. ראייה אחת.</p>
+          <span class="arrow" aria-hidden="true">→</span>
+        </a>
+      </div>
+    </section>
+
+    <!-- ==================================================================
+         09 · Testimonial
+         ================================================================== -->
+    <section class="wrap" id="testimonial" aria-labelledby="quote-headline">
+      <div class="section-meta"><span>[ 09 / Testimonial ]</span></div>
+
+      <div class="testimonial">
+        <blockquote id="quote-headline">
+          ”ציטוט אמיתי מלקוח יושלם בקרוב. עד אז, השאלה היחידה היא אם אתה רוצה לשמוע את זה ממנו או לראות את זה אצלך.“
+        </blockquote>
+        <div class="author">
+          <div class="avatar" aria-hidden="true">·</div>
+          <div class="author-info">
+            <div class="name">לקוח · TBD</div>
+            <div class="role">תפקיד · חברה</div>
+          </div>
+        </div>
+      </div>
+
+      <p class="mono" style="margin-top:1.5rem;font-size:12px">
+        [ ממתין · ציטוט מאומת מאחד הלקוחות שלך ]
+      </p>
+    </section>
+
+    <!-- ==================================================================
+         10 · Partners
+         ================================================================== -->
+    <section class="wrap" id="partners-sec" aria-labelledby="part-headline">
+      <div class="section-meta"><span>[ 10 / Partners ]</span></div>
+
+      <h1 id="part-headline">השותפים שלי.</h1>
+
+      <div class="partners">
+        <div class="partner">לקוח 01</div>
+        <div class="partner">לקוח 02</div>
+        <div class="partner">לקוח 03</div>
+        <div class="partner">לקוח 04</div>
+        <div class="partner">לקוח 05</div>
+        <div class="partner">לקוח 06</div>
+        <div class="partner">לקוח 07</div>
+        <div class="partner">לקוח 08</div>
+        <div class="partner">לקוח 09</div>
+        <div class="partner">לקוח 10</div>
+        <div class="partner">לקוח 11</div>
+        <div class="partner">+6</div>
+      </div>
+
+      <p class="mono" style="margin-top:1.5rem;font-size:12px">
+        [ ממתין · לוגואים אמיתיים של 17 הלקוחות הפעילים ]
+      </p>
+    </section>
+
+    <!-- ==================================================================
+         11 · How I operate
+         ================================================================== -->
+    <section class="wrap" id="principles" aria-labelledby="prin-headline">
+      <div class="section-meta"><span>[ 11 / Principles ]</span></div>
+
+      <h1 id="prin-headline">חמישה כללים.</h1>
+
+      <div class="principles">
+        <div class="principle">
+          <span class="index">01</span>
+          <span class="title">אומרים פעם אחת.</span>
+          <span class="body">אם משפט לא מוסיף משמעות, הוא נחתך. כל מילה משלמת על המקום שלה.</span>
+        </div>
+        <div class="principle">
+          <span class="index">02</span>
+          <span class="title">בונים, לא מדברים.</span>
+          <span class="body">הצעה היא להראות מערכת רצה. לא דק, לא מצגת, לא PDF.</span>
+        </div>
+        <div class="principle">
+          <span class="index">03</span>
+          <span class="title">סוגרים את הלולאה.</span>
+          <span class="body">כל בעיה שנפתחת — נסגרת. לא נשארת תלויה ולא הופכת ל-tech debt.</span>
+        </div>
+        <div class="principle">
+          <span class="index">04</span>
+          <span class="title">שיפ מהיר.</span>
+          <span class="body">מהיר במעבר מבעיה למערכת שרצה. מהיר ללמוד. מהיר לתקן.</span>
+        </div>
+        <div class="principle">
+          <span class="index">05</span>
+          <span class="title">בלי buzzwords.</span>
+          <span class="body">מדברים פשוט. אם צריך מילון כדי להבין, לא הבנתי מה אני מנסה להגיד.</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- ==================================================================
+         12 · CTA · Closing
+         ================================================================== -->
+    <section class="cta" id="contact" aria-labelledby="cta-headline">
+      <div class="wrap">
+        <div class="section-meta"><span>[ 12 / Contact ]</span></div>
+
+        <h2 class="cta-title" id="cta-headline">
+          תביא בעיה<span class="stop" aria-hidden="true"></span><br>
+          נסגור אותה.
+        </h2>
+
+        <div class="contact-grid">
+          <div>
+            <p class="lede" style="margin-bottom:1.5rem">
+              אם הצמיחה הדיגיטלית שלך תקועה, או שאתה צריך מערכת שעובדת לבד — תכתוב.
+            </p>
+            <p>
+              <a class="cta-link" href="mailto:hello@snir.studio">hello@snir.studio</a>
+            </p>
+            <p class="mono" style="margin-top:2rem">
+              תל אביב · מרחוק · est. 2026
+            </p>
+          </div>
+
+          <form action="mailto:hello@snir.studio" method="post" enctype="text/plain" class="contact-form">
+            <div class="field">
+              <label for="cf-name">שם</label>
+              <input type="text" id="cf-name" name="שם" required autocomplete="name">
+            </div>
+            <div class="field">
+              <label for="cf-company">חברה</label>
+              <input type="text" id="cf-company" name="חברה" autocomplete="organization">
+            </div>
+            <div class="field">
+              <label for="cf-email">מייל</label>
+              <input type="email" id="cf-email" name="מייל" required autocomplete="email">
+            </div>
+            <div class="field">
+              <label for="cf-phone">טלפון</label>
+              <input type="tel" id="cf-phone" name="טלפון" autocomplete="tel">
+            </div>
+            <div class="field field-full">
+              <label for="cf-budget">תקציב מדיה חודשי</label>
+              <select id="cf-budget" name="תקציב">
+                <option value="">בחר טווח</option>
+                <option value="0-10k">עד ₪10K</option>
+                <option value="10-50k">₪10K – ₪50K</option>
+                <option value="50-200k">₪50K – ₪200K</option>
+                <option value="200k+">₪200K ומעלה</option>
+              </select>
+            </div>
+            <div class="field field-full">
+              <label for="cf-message">מה הבעיה שצריך לסגור?</label>
+              <textarea id="cf-message" name="הודעה" rows="4"></textarea>
+            </div>
+            <button type="submit" class="btn">שליחה <span class="arrow">→</span></button>
+          </form>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- ====================================================================
+       Footer
+       ==================================================================== -->
+  <footer>
+    <a href="#top" class="wordmark" aria-label="חזרה לראש העמוד">SNIR<span class="stop" aria-hidden="true"></span></a>
+    <div class="meta">
+      <span>© 2026 Snir Dote</span>
+      <span>Tel Aviv / Remote</span>
+      <a href="mailto:hello@snir.studio" style="color:inherit;text-decoration:none">hello@snir.studio</a>
+      <a href="https://instagram.com/snir.studio" style="color:inherit;text-decoration:none">@snir.studio</a>
     </div>
-    <footer>© 2026 alallalalalala</footer>
-  </div>
+  </footer>
+
 </body>
 </html>
