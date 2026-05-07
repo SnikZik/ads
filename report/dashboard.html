@@ -467,6 +467,15 @@
       </div>
     </div>
 
+    <!-- E-Commerce KPIs -->
+    <div class="section" id="ecomSection" style="display:none;">
+      <div class="section-header">
+        <span class="section-title">מסחר אלקטרוני</span>
+        <span class="section-source">Google Analytics</span>
+      </div>
+      <div class="kpi-grid" id="ecomGrid"></div>
+    </div>
+
     <!-- GA4 — Sources + Pages -->
     <div class="section">
       <div class="two-col">
@@ -573,6 +582,7 @@
     }
 
     if (d.ga4)      renderGA4(d.ga4);
+    if (d.ga4 && d.ga4.ecommerce) renderEcommerce(d.ga4.ecommerce);
     if (d.shopify)  renderShopify(d.shopify);
     if (d.facebook) renderFacebook(d.facebook);
   }
@@ -674,6 +684,29 @@
     }).join("");
   }
 
+  // ── E-Commerce ────────────────────────────
+  function renderEcommerce(ec) {
+    if (!ec) return;
+    document.getElementById("ecomSection").style.display = "block";
+
+    var cards = [
+      { label: "הוספה לסל",       cur: ec.addToCart.current,     prev: ec.addToCart.previous,    fmt: num },
+      { label: "התחלת צ׳קאאוט",   cur: ec.beginCheckout.current,  prev: ec.beginCheckout.previous, fmt: num },
+      { label: "הרשמות",          cur: ec.signUp.current,         prev: ec.signUp.previous,        fmt: num },
+      { label: "רכישות",          cur: ec.purchases.current,      prev: ec.purchases.previous,     fmt: num },
+      { label: "סה״כ מכירות",     cur: ec.revenue.current,        prev: ec.revenue.previous,       fmt: rev },
+    ];
+
+    document.getElementById("ecomGrid").innerHTML = cards.map(function (c) {
+      var d = delta(c.cur, c.prev, false);
+      return '<div class="kpi-card">' +
+        '<div class="kpi-label">' + c.label + '</div>' +
+        '<div class="kpi-value">' + c.fmt(c.cur) + '</div>' +
+        '<div class="kpi-delta ' + d.cls + '">' + d.txt + '</div>' +
+        '</div>';
+    }).join("");
+  }
+
   // ── Shopify Leads ─────────────────────────
   function renderShopify(sh) {
     var pro  = sh.pro        || { total: 0, newMonth: 0, recent: [] };
@@ -752,6 +785,13 @@
   }
 
   function pct(n)  { return (n * 100).toFixed(1) + "%"; }
+
+  function rev(n) {
+    n = parseFloat(n) || 0;
+    if (n >= 1000000) return CONFIG.currency + (n / 1000000).toFixed(1) + "M";
+    if (n >= 1000)    return CONFIG.currency + (n / 1000).toFixed(1) + "K";
+    return CONFIG.currency + n.toFixed(0);
+  }
 
   function dur(n) {
     var m = Math.floor(n / 60), s = Math.floor(n % 60);

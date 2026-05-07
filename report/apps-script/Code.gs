@@ -72,7 +72,7 @@ function doPost(e) {
 }
 
 // ─────────────────────────────────────────────
-//  GA4 — Sessions + traffic data
+//  GA4 — Sessions + traffic + ecommerce data
 // ─────────────────────────────────────────────
 function getGA4Data() {
   var token    = ScriptApp.getOAuthToken();
@@ -94,6 +94,22 @@ function getGA4Data() {
       { name: "bounceRate" },
       { name: "averageSessionDuration" },
     ],
+  }, token);
+
+  // Ecommerce events — current period
+  var ecomRes = apiPost(baseUrl, {
+    dateRanges: [
+      { startDate: curStart, endDate: today,  name: "current"  },
+      { startDate: prevStart, endDate: prevEnd, name: "previous" },
+    ],
+    dimensions: [{ name: "eventName" }],
+    metrics:    [{ name: "eventCount" }, { name: "purchaseRevenue" }],
+    dimensionFilter: {
+      filter: {
+        fieldName: "eventName",
+        inListFilter: { values: ["add_to_cart", "begin_checkout", "sign_up", "purchase"] },
+      },
+    },
   }, token);
 
   var sourceRes = apiPost(baseUrl, {
@@ -122,6 +138,7 @@ function getGA4Data() {
   var rows = overviewRes.rows || [];
   return {
     overview:  { current: extractMetricRow(rows, "current"), previous: extractMetricRow(rows, "previous") },
+    ecommerce: formatEcommerce(ecomRes),
     sources:   formatDimMetric(sourceRes),
     pages:     formatPages(pagesRes),
     sparkline: formatSparkline(sparkRes),
@@ -229,6 +246,29 @@ function extractMetricRow(rows, name) {
     }
   }
   return {};
+}
+
+function formatEcommerce(res) {
+  var events = ["add_to_cart", "begin_checkout", "sign_up", "purchase"];
+  var cur = {}, prev = {};
+  (res.rows || []).forEach(function(r) {
+    var name    = r.dimensionValues[0].value;
+    var period  = r.dimensionValues[1] ? r.dimensionValues[1].value : "current";
+    var count   = parseInt(r.metricValues[0].value, 10) || 0;
+    var revenue = parseFloat(r.metricValues[1].value) || 0;
+    if (period === "current")  { cur[name]  = { count: count, revenue: revenue }; }
+    if (period === "previous") { prev[name] = { count: count, revenue: revenue }; }
+  });
+  // Handle case where API returns rows without dateRange dimension (single period)
+  // When two dateRanges are used, GA4 adds a dateRange dimension automatically
+  // If it doesn't (old API behavior), fall back gracefully
+  return {
+    addToCart:      { current: (cur["add_to_cart"]    || {}).count   || 0, previous: (prev["add_to_cart"]    || {}).count   || 0 },
+    beginCheckout:  { current: (cur["begin_checkout"] || {}).count   || 0, previous: (prev["begin_checkout"] || {}).count   || 0 },
+    signUp:         { current: (cur["sign_up"]        || {}).count   || 0, previous: (prev["sign_up"]        || {}).count   || 0 },
+    purchases:      { current: (cur["purchase"]       || {}).count   || 0, previous: (prev["purchase"]       || {}).count   || 0 },
+    revenue:        { current: (cur["purchase"]       || {}).revenue || 0, previous: (prev["purchase"]       || {}).revenue || 0 },
+  };
 }
 
 function formatDimMetric(res) {
