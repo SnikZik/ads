@@ -135,7 +135,7 @@ function getGA4Data(startDate, endDate) {
     limit: 8,
   }, token);
 
-  // Events by channel: form_submit + view_item
+  // Events by channel: form_submit + view_item + add_to_cart
   var convSourceRes = apiPost(baseUrl, {
     dateRanges: [{ startDate: startDate, endDate: endDate }],
     dimensions: [{ name: "sessionDefaultChannelGroup" }, { name: "eventName" }],
@@ -143,7 +143,7 @@ function getGA4Data(startDate, endDate) {
     dimensionFilter: {
       filter: {
         fieldName: "eventName",
-        inListFilter: { values: ["form_submit", "view_item"] },
+        inListFilter: { values: ["form_submit", "view_item", "add_to_cart"] },
       },
     },
   }, token);
