@@ -4,34 +4,47 @@
 // ─────────────────────────────────────────────
 
 var CONFIG = {
-  // Google Analytics 4
-  GA4_PROPERTY_ID: "properties/530503478",  // GA4 Admin → Property Settings → Property ID
-
-  // Google Sheets (one spreadsheet, two tabs)
-  SPREADSHEET_ID:      "1gh5plrE3UdklLWwZwqpdxagP75A2KI219IeR37Hfo2c", // Sheet ID from URL
-  SHOPIFY_SHEET_NAME:  "Shopify Leads",            // tab for Shopify Flow webhooks
-  FB_SHEET_NAME:       "עותק של New 29/04/26",      // tab for Facebook leads
-
+  GA4_PROPERTY_ID: "properties/530503478",
+  SPREADSHEET_ID:      "1gh5plrE3UdklLWwZwqpdxagP75A2KI219IeR37Hfo2c",
+  SHOPIFY_SHEET_NAME:  "Shopify Leads",
+  FB_SHEET_NAME:       "עותק של New 29/04/26",
   DAYS_BACK: 30,
 };
 
 // ─────────────────────────────────────────────
-//  doGet — dashboard data endpoint
-//  Supports ?days=N to override default period
+//  doGet — supports ?startDate=YYYY-MM-DD&endDate=YYYY-MM-DD
+//           or legacy ?days=N
 // ─────────────────────────────────────────────
 function doGet(e) {
   try {
-    var days = CONFIG.DAYS_BACK;
-    if (e && e.parameter && e.parameter.days) {
-      var d = parseInt(e.parameter.days, 10);
-      if (d > 0 && d <= 365) days = d;
+    var startDate, endDate, label;
+    var today = formatDate(new Date());
+
+    if (e && e.parameter) {
+      if (e.parameter.startDate && e.parameter.endDate) {
+        startDate = e.parameter.startDate;
+        endDate   = e.parameter.endDate;
+        label     = e.parameter.label || null;
+      } else if (e.parameter.days) {
+        var d = parseInt(e.parameter.days, 10);
+        if (d > 0 && d <= 365) {
+          startDate = formatDate(daysAgo(d));
+          endDate   = today;
+        }
+      }
     }
+
+    if (!startDate) {
+      startDate = formatDate(daysAgo(CONFIG.DAYS_BACK));
+      endDate   = today;
+    }
+
     var data = {
-      ga4:      getGA4Data(days),
+      ga4:      getGA4Data(startDate, endDate),
       shopify:  getShopifyLeads(),
       facebook: getFacebookLeads(),
       updated:  new Date().toISOString(),
-      config:   { daysBack: days },
+      config:   { startDate: startDate, endDate: endDate, label: label },
     };
     return respond(data);
   } catch (err) {
@@ -41,8 +54,6 @@ function doGet(e) {
 
 // ─────────────────────────────────────────────
 //  doPost — Shopify Flow webhook receiver
-//  Shopify Flow sends: { name, email, tags, type }
-//  Deploy → Web app → Anyone can access (for Flow to reach it)
 // ─────────────────────────────────────────────
 function doPost(e) {
   try {
@@ -50,19 +61,15 @@ function doPost(e) {
     var ss    = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
     var sheet = ss.getSheetByName(CONFIG.SHOPIFY_SHEET_NAME);
 
-    // Create tab if missing
     if (!sheet) {
       sheet = ss.insertSheet(CONFIG.SHOPIFY_SHEET_NAME);
       sheet.appendRow(["timestamp", "name", "email", "tags", "type"]);
     }
-
-    // If first row is empty (brand new sheet), add headers
     if (sheet.getLastRow() === 0) {
       sheet.appendRow(["timestamp", "name", "email", "tags", "type"]);
     }
 
     var type = (body.tags || "").indexOf("pro_club") !== -1 ? "pro_club" : "newsletter";
-
     sheet.appendRow([
       new Date().toISOString(),
       body.name  || "",
@@ -70,7 +77,6 @@ function doPost(e) {
       body.tags  || "",
       type,
     ]);
-
     return respond({ ok: true });
   } catch (err) {
     return respond({ error: err.message });
@@ -78,21 +84,24 @@ function doPost(e) {
 }
 
 // ─────────────────────────────────────────────
-//  GA4 — Sessions + traffic + ecommerce + sources
+//  GA4 — all queries use explicit date range
 // ─────────────────────────────────────────────
-function getGA4Data(days) {
-  days = days || CONFIG.DAYS_BACK;
-  var token    = ScriptApp.getOAuthToken();
-  var baseUrl  = "https://analyticsdata.googleapis.com/v1beta/" + CONFIG.GA4_PROPERTY_ID + ":runReport";
-  var today    = formatDate(new Date());
-  var curStart = formatDate(daysAgo(days));
-  var prevEnd  = formatDate(daysAgo(days + 1));
-  var prevStart= formatDate(daysAgo(days * 2));
+function getGA4Data(startDate, endDate) {
+  var token   = ScriptApp.getOAuthToken();
+  var baseUrl = "https://analyticsdata.googleapis.com/v1beta/" + CONFIG.GA4_PROPERTY_ID + ":runReport";
+
+  // Previous period of equal length
+  var d1      = new Date(startDate);
+  var d2      = new Date(endDate);
+  var msDay   = 86400000;
+  var periodMs = (d2 - d1) + msDay;
+  var prevEnd   = formatDate(new Date(d1.getTime() - msDay));
+  var prevStart = formatDate(new Date(d1.getTime() - periodMs));
 
   var overviewRes = apiPost(baseUrl, {
     dateRanges: [
-      { startDate: curStart,  endDate: today,   name: "current"  },
-      { startDate: prevStart, endDate: prevEnd,  name: "previous" },
+      { startDate: startDate, endDate: endDate,   name: "current"  },
+      { startDate: prevStart, endDate: prevEnd,    name: "previous" },
     ],
     metrics: [
       { name: "sessions" },
@@ -103,11 +112,10 @@ function getGA4Data(days) {
     ],
   }, token);
 
-  // Ecommerce events — current + previous period
   var ecomRes = apiPost(baseUrl, {
     dateRanges: [
-      { startDate: curStart, endDate: today,   name: "current"  },
-      { startDate: prevStart, endDate: prevEnd, name: "previous" },
+      { startDate: startDate, endDate: endDate,   name: "current"  },
+      { startDate: prevStart, endDate: prevEnd,    name: "previous" },
     ],
     dimensions: [{ name: "eventName" }],
     metrics:    [{ name: "eventCount" }, { name: "purchaseRevenue" }],
@@ -119,18 +127,16 @@ function getGA4Data(days) {
     },
   }, token);
 
-  // Sessions by channel (for donut chart)
   var sourceRes = apiPost(baseUrl, {
-    dateRanges: [{ startDate: curStart, endDate: today }],
+    dateRanges: [{ startDate: startDate, endDate: endDate }],
     dimensions: [{ name: "sessionDefaultChannelGroup" }],
     metrics:    [{ name: "sessions" }],
     orderBys:   [{ metric: { metricName: "sessions" }, desc: true }],
     limit: 8,
   }, token);
 
-  // Conversions (purchase) by channel
   var convSourceRes = apiPost(baseUrl, {
-    dateRanges: [{ startDate: curStart, endDate: today }],
+    dateRanges: [{ startDate: startDate, endDate: endDate }],
     dimensions: [{ name: "sessionDefaultChannelGroup" }],
     metrics:    [{ name: "eventCount" }],
     dimensionFilter: {
@@ -143,7 +149,7 @@ function getGA4Data(days) {
   }, token);
 
   var pagesRes = apiPost(baseUrl, {
-    dateRanges: [{ startDate: curStart, endDate: today }],
+    dateRanges: [{ startDate: startDate, endDate: endDate }],
     dimensions: [{ name: "pageTitle" }, { name: "pagePath" }],
     metrics:    [{ name: "sessions" }, { name: "screenPageViews" }],
     orderBys:   [{ metric: { metricName: "sessions" }, desc: true }],
@@ -151,7 +157,7 @@ function getGA4Data(days) {
   }, token);
 
   var sparkRes = apiPost(baseUrl, {
-    dateRanges: [{ startDate: curStart, endDate: today }],
+    dateRanges: [{ startDate: startDate, endDate: endDate }],
     dimensions: [{ name: "date" }],
     metrics:    [{ name: "sessions" }],
     orderBys:   [{ dimension: { dimensionName: "date" } }],
@@ -169,7 +175,7 @@ function getGA4Data(days) {
 }
 
 // ─────────────────────────────────────────────
-//  Shopify leads — reads from Sheet (populated by Flow webhook)
+//  Shopify leads
 // ─────────────────────────────────────────────
 function getShopifyLeads() {
   try {
@@ -197,15 +203,8 @@ function getShopifyLeads() {
     }
 
     return {
-      pro: {
-        total:    pro.length,
-        newMonth: newThisMonth(pro),
-        recent:   recentRows(pro),
-      },
-      newsletter: {
-        total:    news.length,
-        newMonth: newThisMonth(news),
-      },
+      pro:        { total: pro.length,  newMonth: newThisMonth(pro),  recent: recentRows(pro) },
+      newsletter: { total: news.length, newMonth: newThisMonth(news) },
     };
   } catch (e) {
     return { error: e.message, pro: { total: 0, newMonth: 0, recent: [] }, newsletter: { total: 0, newMonth: 0 } };
@@ -213,7 +212,7 @@ function getShopifyLeads() {
 }
 
 // ─────────────────────────────────────────────
-//  Facebook leads — reads from Sheet
+//  Facebook leads
 // ─────────────────────────────────────────────
 function getFacebookLeads() {
   try {
