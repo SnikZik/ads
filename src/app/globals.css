@@ -1,0 +1,26 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    background-color: #F5F2EC;
+    color: #0B0B0F;
+  }
+
+  ::selection {
+    background-color: #C7BBF5;
+    color: #0B0B0F;
+  }
+
+  hr {
+    border-color: #0B0B0F;
+    opacity: 0.12;
+  }
+}
+
+@layer utilities {
+  .section-divider {
+    @apply border-t border-ink/10 my-16;
+  }
+}
