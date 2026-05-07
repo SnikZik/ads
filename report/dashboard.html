@@ -549,7 +549,7 @@
     </div>
 
     <!-- 2. Shopify Leads -->
-    <div class="section" id="shopifySection" style="display:none;">
+    <div class="section" id="shopifySection">
       <div class="section-header">
         <span class="section-title">לידים</span>
         <span class="section-source">Shopify Forms</span>
@@ -840,7 +840,7 @@
   function renderShopify(sh) {
     var pro  = sh.pro        || { total: 0, newMonth: 0, recent: [] };
     var news = sh.newsletter || { total: 0, newMonth: 0 };
-    if (pro.total === 0 && news.total === 0) return;
+
 
     var recentHtml = "";
     if (pro.recent && pro.recent.length) {
@@ -856,7 +856,6 @@
         '</div></div>';
     }
 
-    document.getElementById("shopifySection").style.display = "block";
     document.getElementById("leadsPanel").innerHTML =
       '<div class="leads-panel">' +
         '<div class="leads-type pro">Pro Club</div>' +
