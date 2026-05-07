@@ -456,11 +456,11 @@
     </div>
     <div class="meta-row">
       <select id="periodSelect" class="period-select">
-        <option value="today">היום</option>
+        <option value="today" selected>היום</option>
         <option value="yesterday">אתמול</option>
         <option value="7">7 ימים אחרונים</option>
         <option value="14">14 יום אחרונים</option>
-        <option value="30" selected>30 יום אחרונים</option>
+        <option value="30">30 יום אחרונים</option>
         <option value="60">60 יום אחרונים</option>
         <option value="90">90 יום אחרונים</option>
       </select>
@@ -519,8 +519,9 @@
               <tr>
                 <th>ערוץ</th>
                 <th style="text-align:left;">סשנים</th>
-                <th style="text-align:left;color:var(--purple);">רכישות</th>
-                <th style="text-align:left;">המרה</th>
+                <th style="text-align:left;color:var(--purple);">הרשמות</th>
+                <th style="text-align:left;">צפ׳ מוצר</th>
+                <th style="text-align:left;">זמן</th>
               </tr>
             </thead>
             <tbody id="chanPerfBody"></tbody>
@@ -585,7 +586,7 @@
   var cache      = null;
   var sparkChart = null;
   var srcChart   = null;
-  var currentMode = "30";
+  var currentMode = "today";
 
   // ── Date helpers ──────────────────────────
   function localStr(d) {
@@ -731,10 +732,9 @@
     });
 
     // Sources donut
-    var sources     = ga4.sources || [];
-    var convSources = ga4.conversionsBySource || [];
-    var convMap     = {};
-    convSources.forEach(function (c) { convMap[c.source] = c.conversions; });
+    var sources      = ga4.sources || [];
+    var convSources  = ga4.conversionsBySource || {};   // { channel: { purchase: N, form_submit: M } }
+    var durationMap  = ga4.durationBySource    || {};   // { channel: seconds }
 
     var ctx2 = document.getElementById("sourceChart").getContext("2d");
     if (srcChart) srcChart.destroy();
@@ -765,12 +765,15 @@
                 return sources[c[0].dataIndex] ? sources[c[0].dataIndex].label : "";
               },
               label: function (c) {
-                var s = sources[c.dataIndex];
-                var conv = convMap[s ? s.label : ""] || 0;
-                var lines = [
-                  "סשנים:   " + num(c.parsed) + " (" + (s ? s.pct : 0) + "%)",
-                ];
-                if (conv > 0) lines.push("רכישות:  " + conv);
+                var s          = sources[c.dataIndex];
+                var ch         = convSources[s ? s.label : ""] || {};
+                var formSubmit = ch["form_submit"] || 0;
+                var viewItem   = ch["view_item"]   || 0;
+                var secs       = durationMap[s ? s.label : ""] || 0;
+                var lines      = ["סשנים:   " + num(c.parsed) + " (" + (s ? s.pct : 0) + "%)"];
+                if (formSubmit > 0) lines.push("הרשמות:  " + formSubmit);
+                if (viewItem   > 0) lines.push("צפ׳ מוצר: " + num(viewItem));
+                if (secs       > 0) lines.push("זמן:     " + dur(secs));
                 return lines;
               },
             },
@@ -781,9 +784,11 @@
 
     // Combined channel performance table
     document.getElementById("chanPerfBody").innerHTML = sources.map(function (s, i) {
-      var conv = convMap[s.label] || 0;
-      var rate = s.value > 0 ? ((conv / s.value) * 100).toFixed(2) + "%" : "—";
-      var barW = Math.round(s.pct * 0.8); // max ~80px visual
+      var ch         = convSources[s.label] || {};
+      var formSubmit = ch["form_submit"] || 0;
+      var viewItem   = ch["view_item"]   || 0;
+      var secs       = durationMap[s.label] || 0;
+      var barW       = Math.round(s.pct * 0.8);
       return '<tr>' +
         '<td>' +
           '<div class="chan-bar-wrap">' +
@@ -792,8 +797,9 @@
           '</div>' +
         '</td>' +
         '<td class="cell-mono">' + num(s.value) + ' <span style="color:var(--ink-mute)">(' + s.pct + '%)</span></td>' +
-        '<td class="' + (conv > 0 ? "cell-conv" : "cell-mono") + '">' + (conv > 0 ? conv : "—") + '</td>' +
-        '<td class="cell-mono" style="color:' + (conv > 0 ? "var(--green)" : "var(--ink-mute)") + ';">' + rate + '</td>' +
+        '<td class="' + (formSubmit > 0 ? "cell-conv" : "cell-mono") + '">' + (formSubmit > 0 ? formSubmit : "—") + '</td>' +
+        '<td class="cell-mono">' + (viewItem > 0 ? num(viewItem) : "—") + '</td>' +
+        '<td class="cell-mono">' + (secs > 0 ? dur(secs) : "—") + '</td>' +
         '</tr>';
     }).join("");
 
@@ -813,10 +819,10 @@
     document.getElementById("ecomSection").style.display = "block";
 
     var cards = [
-      { label: "הוספה לסל",      cur: ec.addToCart.current,      prev: ec.addToCart.previous,     fmt: num },
-      { label: "התחלת צ׳קאאוט",  cur: ec.beginCheckout.current,  prev: ec.beginCheckout.previous,  fmt: num },
-      { label: "הרשמות",         cur: ec.signUp.current,          prev: ec.signUp.previous,         fmt: num },
-      { label: "רכישות",         cur: ec.purchases.current,       prev: ec.purchases.previous,      fmt: num },
+      { label: "הוספה לסל",    cur: (ec.addToCart  ||{}).current||0, prev: (ec.addToCart  ||{}).previous||0, fmt: num },
+      { label: "צפייה במוצר", cur: (ec.viewItem   ||{}).current||0, prev: (ec.viewItem   ||{}).previous||0, fmt: num },
+      { label: "הרשמות",      cur: (ec.formSubmit ||{}).current||0, prev: (ec.formSubmit ||{}).previous||0, fmt: num },
+      { label: "רכישות",      cur: (ec.purchases  ||{}).current||0, prev: (ec.purchases  ||{}).previous||0, fmt: num },
       { label: "סה״כ מכירות",    cur: ec.revenue.current,         prev: ec.revenue.previous,        fmt: rev },
     ];
 
