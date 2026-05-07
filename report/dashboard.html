@@ -542,9 +542,10 @@
               <tr>
                 <th>ערוץ</th>
                 <th style="text-align:left;">סשנים</th>
-                <th style="text-align:left;color:var(--purple);">הרשמות</th>
-                <th style="text-align:left;">הוספה לסל</th>
                 <th style="text-align:left;">צפ׳ מוצר</th>
+                <th style="text-align:left;">הוספה לסל</th>
+                <th style="text-align:left;color:var(--purple);">הרשמות</th>
+                <th style="text-align:left;">רכישות</th>
                 <th style="text-align:left;">זמן</th>
               </tr>
             </thead>
@@ -810,9 +811,10 @@
     // Combined channel performance table
     document.getElementById("chanPerfBody").innerHTML = sources.map(function (s, i) {
       var ch         = convSources[s.label] || {};
-      var formSubmit = ch["form_submit"] || 0;
-      var addToCart  = ch["add_to_cart"] || 0;
       var viewItem   = ch["view_item"]   || 0;
+      var addToCart  = ch["add_to_cart"] || 0;
+      var formSubmit = ch["form_submit"] || 0;
+      var purchases  = ch["purchase"]    || 0;
       var secs       = durationMap[s.label] || 0;
       var barW       = Math.round(s.pct * 0.8);
       return '<tr>' +
@@ -823,9 +825,10 @@
           '</div>' +
         '</td>' +
         '<td class="cell-mono">' + num(s.value) + ' <span style="color:var(--ink-mute)">(' + s.pct + '%)</span></td>' +
+        '<td class="cell-mono">' + (viewItem   > 0 ? num(viewItem)   : "—") + '</td>' +
+        '<td class="cell-mono">' + (addToCart  > 0 ? num(addToCart)  : "—") + '</td>' +
         '<td class="' + (formSubmit > 0 ? "cell-conv" : "cell-mono") + '">' + (formSubmit > 0 ? formSubmit : "—") + '</td>' +
-        '<td class="cell-mono">' + (addToCart > 0 ? num(addToCart) : "—") + '</td>' +
-        '<td class="cell-mono">' + (viewItem > 0 ? num(viewItem) : "—") + '</td>' +
+        '<td class="cell-mono">' + (purchases  > 0 ? num(purchases)  : "—") + '</td>' +
         '<td class="cell-mono">' + (secs > 0 ? dur(secs) : "—") + '</td>' +
         '</tr>';
     }).join("");

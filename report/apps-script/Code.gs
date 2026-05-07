@@ -143,7 +143,7 @@ function getGA4Data(startDate, endDate) {
     dimensionFilter: {
       filter: {
         fieldName: "eventName",
-        inListFilter: { values: ["form_submit", "view_item", "add_to_cart"] },
+        inListFilter: { values: ["view_item", "add_to_cart", "form_submit", "purchase"] },
       },
     },
   }, token);
