@@ -403,6 +403,29 @@
       color: var(--ink);
     }
 
+    /* ── FB Pager ───────────────────────────── */
+    .fb-pager {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      margin-top: 1rem;
+      font-family: var(--font-mono);
+      font-size: 0.72rem;
+      color: var(--ink-mute);
+    }
+    .fb-pager button {
+      background: none;
+      border: 1px solid var(--rule);
+      border-radius: 4px;
+      padding: 0.3rem 0.8rem;
+      font-family: var(--font-mono);
+      font-size: 0.72rem;
+      cursor: pointer;
+      color: var(--ink);
+    }
+    .fb-pager button:disabled { opacity: 0.3; cursor: default; }
+    .fb-pager button:not(:disabled):hover { border-color: var(--purple); color: var(--purple); }
+
     /* ── Stale warning ───────────────────────── */
     .stale-bar {
       background: rgba(192,57,43,0.07);
@@ -565,6 +588,7 @@
       </div>
       <div class="fb-grid" id="fbGrid"></div>
       <table class="data-table" id="fbTable" style="margin-top:1.25rem;"></table>
+      <div class="fb-pager" id="fbPager"></div>
     </div>
 
     <div class="footer">
@@ -871,6 +895,9 @@
   }
 
   // ── Facebook Leads ────────────────────────
+  var _fbRows = [], _fbHeaders = [], _fbPage = 0;
+  var FB_PAGE_SIZE = 20;
+
   function renderFacebook(fb) {
     if (!fb || fb.total === 0) return;
     document.getElementById("fbSection").style.display = "block";
@@ -881,22 +908,37 @@
         '<div class="fb-val">' + num(fb.total) + '</div>' +
       '</div>';
 
-    if (!fb.recent || !fb.recent.length || !fb.headers || !fb.headers.length) return;
+    if (!fb.headers || !fb.headers.length) return;
+    _fbHeaders = fb.headers;
+    _fbRows    = fb.rows || fb.recent || [];
+    _fbPage    = 0;
+    renderFbPage();
+  }
 
-    var headers = fb.headers;
+  function renderFbPage() {
+    var start  = _fbPage * FB_PAGE_SIZE;
+    var slice  = _fbRows.slice(start, start + FB_PAGE_SIZE);
+    var total  = _fbRows.length;
+    var pages  = Math.ceil(total / FB_PAGE_SIZE);
+
     document.getElementById("fbTable").innerHTML =
       '<thead><tr>' +
-        headers.map(function (h) { return '<th>' + esc(String(h)) + '</th>'; }).join("") +
+        _fbHeaders.map(function (h) { return '<th>' + esc(String(h)) + '</th>'; }).join("") +
       '</tr></thead>' +
       '<tbody>' +
-        fb.recent.map(function (row) {
+        slice.map(function (row) {
           return '<tr>' +
-            headers.map(function (h) {
+            _fbHeaders.map(function (h) {
               return '<td>' + esc(String(row[h] !== undefined ? row[h] : "")) + '</td>';
             }).join("") +
           '</tr>';
         }).join("") +
       '</tbody>';
+
+    document.getElementById("fbPager").innerHTML =
+      '<button onclick="_fbPage--;renderFbPage()" ' + (_fbPage === 0 ? 'disabled' : '') + '>→ הקודם</button>' +
+      '<span>עמוד ' + (_fbPage + 1) + ' מתוך ' + pages + ' · ' + total + ' לידים</span>' +
+      '<button onclick="_fbPage++;renderFbPage()" ' + (_fbPage >= pages - 1 ? 'disabled' : '') + '>← הבא</button>';
   }
 
   // ── Formatters ────────────────────────────
