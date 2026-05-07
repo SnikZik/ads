@@ -8,7 +8,7 @@ var CONFIG = {
   GA4_PROPERTY_ID: "properties/530503478",  // GA4 Admin → Property Settings → Property ID
 
   // Google Sheets (one spreadsheet, two tabs)
-  SPREADSHEET_ID:      "XXXXXXXXXXXXXXXXXXXXXXXX", // Sheet ID from URL
+  SPREADSHEET_ID:      "1gh5plrE3UdklLWwZwqpdxagP75A2KI219IeR37Hfo2c", // Sheet ID from URL
   SHOPIFY_SHEET_NAME:  "Shopify Leads",            // tab for Shopify Flow webhooks
   FB_SHEET_NAME:       "עותק של New 29/04/26",      // tab for Facebook leads
 
@@ -17,15 +17,21 @@ var CONFIG = {
 
 // ─────────────────────────────────────────────
 //  doGet — dashboard data endpoint
+//  Supports ?days=N to override default period
 // ─────────────────────────────────────────────
 function doGet(e) {
   try {
+    var days = CONFIG.DAYS_BACK;
+    if (e && e.parameter && e.parameter.days) {
+      var d = parseInt(e.parameter.days, 10);
+      if (d > 0 && d <= 365) days = d;
+    }
     var data = {
-      ga4:      getGA4Data(),
+      ga4:      getGA4Data(days),
       shopify:  getShopifyLeads(),
       facebook: getFacebookLeads(),
       updated:  new Date().toISOString(),
-      config:   { daysBack: CONFIG.DAYS_BACK },
+      config:   { daysBack: days },
     };
     return respond(data);
   } catch (err) {
@@ -72,15 +78,16 @@ function doPost(e) {
 }
 
 // ─────────────────────────────────────────────
-//  GA4 — Sessions + traffic + ecommerce data
+//  GA4 — Sessions + traffic + ecommerce + sources
 // ─────────────────────────────────────────────
-function getGA4Data() {
+function getGA4Data(days) {
+  days = days || CONFIG.DAYS_BACK;
   var token    = ScriptApp.getOAuthToken();
   var baseUrl  = "https://analyticsdata.googleapis.com/v1beta/" + CONFIG.GA4_PROPERTY_ID + ":runReport";
   var today    = formatDate(new Date());
-  var curStart = formatDate(daysAgo(CONFIG.DAYS_BACK));
-  var prevEnd  = formatDate(daysAgo(CONFIG.DAYS_BACK + 1));
-  var prevStart= formatDate(daysAgo(CONFIG.DAYS_BACK * 2));
+  var curStart = formatDate(daysAgo(days));
+  var prevEnd  = formatDate(daysAgo(days + 1));
+  var prevStart= formatDate(daysAgo(days * 2));
 
   var overviewRes = apiPost(baseUrl, {
     dateRanges: [
@@ -96,10 +103,10 @@ function getGA4Data() {
     ],
   }, token);
 
-  // Ecommerce events — current period
+  // Ecommerce events — current + previous period
   var ecomRes = apiPost(baseUrl, {
     dateRanges: [
-      { startDate: curStart, endDate: today,  name: "current"  },
+      { startDate: curStart, endDate: today,   name: "current"  },
       { startDate: prevStart, endDate: prevEnd, name: "previous" },
     ],
     dimensions: [{ name: "eventName" }],
@@ -112,12 +119,27 @@ function getGA4Data() {
     },
   }, token);
 
+  // Sessions by channel (for donut chart)
   var sourceRes = apiPost(baseUrl, {
     dateRanges: [{ startDate: curStart, endDate: today }],
     dimensions: [{ name: "sessionDefaultChannelGroup" }],
     metrics:    [{ name: "sessions" }],
     orderBys:   [{ metric: { metricName: "sessions" }, desc: true }],
-    limit: 6,
+    limit: 8,
+  }, token);
+
+  // Conversions (purchase) by channel
+  var convSourceRes = apiPost(baseUrl, {
+    dateRanges: [{ startDate: curStart, endDate: today }],
+    dimensions: [{ name: "sessionDefaultChannelGroup" }],
+    metrics:    [{ name: "eventCount" }],
+    dimensionFilter: {
+      filter: {
+        fieldName: "eventName",
+        stringFilter: { matchType: "EXACT", value: "purchase" },
+      },
+    },
+    orderBys: [{ metric: { metricName: "eventCount" }, desc: true }],
   }, token);
 
   var pagesRes = apiPost(baseUrl, {
@@ -137,11 +159,12 @@ function getGA4Data() {
 
   var rows = overviewRes.rows || [];
   return {
-    overview:  { current: extractMetricRow(rows, "current"), previous: extractMetricRow(rows, "previous") },
-    ecommerce: formatEcommerce(ecomRes),
-    sources:   formatDimMetric(sourceRes),
-    pages:     formatPages(pagesRes),
-    sparkline: formatSparkline(sparkRes),
+    overview:            { current: extractMetricRow(rows, "current"), previous: extractMetricRow(rows, "previous") },
+    ecommerce:           formatEcommerce(ecomRes),
+    sources:             formatDimMetric(sourceRes),
+    conversionsBySource: formatConversionsBySource(convSourceRes),
+    pages:               formatPages(pagesRes),
+    sparkline:           formatSparkline(sparkRes),
   };
 }
 
@@ -156,9 +179,8 @@ function getShopifyLeads() {
       return { pro: { total: 0, newMonth: 0, recent: [] }, newsletter: { total: 0, newMonth: 0 } };
     }
 
-    var data    = sheet.getDataRange().getValues();
-    var headers = data[0]; // timestamp, name, email, tags, type
-    var rows    = data.slice(1);
+    var data       = sheet.getDataRange().getValues();
+    var rows       = data.slice(1);
     var monthStart = getMonthStart();
 
     var pro  = rows.filter(function (r) { return r[4] === "pro_club"; });
@@ -249,7 +271,6 @@ function extractMetricRow(rows, name) {
 }
 
 function formatEcommerce(res) {
-  var events = ["add_to_cart", "begin_checkout", "sign_up", "purchase"];
   var cur = {}, prev = {};
   (res.rows || []).forEach(function(r) {
     var name    = r.dimensionValues[0].value;
@@ -259,15 +280,12 @@ function formatEcommerce(res) {
     if (period === "current")  { cur[name]  = { count: count, revenue: revenue }; }
     if (period === "previous") { prev[name] = { count: count, revenue: revenue }; }
   });
-  // Handle case where API returns rows without dateRange dimension (single period)
-  // When two dateRanges are used, GA4 adds a dateRange dimension automatically
-  // If it doesn't (old API behavior), fall back gracefully
   return {
-    addToCart:      { current: (cur["add_to_cart"]    || {}).count   || 0, previous: (prev["add_to_cart"]    || {}).count   || 0 },
-    beginCheckout:  { current: (cur["begin_checkout"] || {}).count   || 0, previous: (prev["begin_checkout"] || {}).count   || 0 },
-    signUp:         { current: (cur["sign_up"]        || {}).count   || 0, previous: (prev["sign_up"]        || {}).count   || 0 },
-    purchases:      { current: (cur["purchase"]       || {}).count   || 0, previous: (prev["purchase"]       || {}).count   || 0 },
-    revenue:        { current: (cur["purchase"]       || {}).revenue || 0, previous: (prev["purchase"]       || {}).revenue || 0 },
+    addToCart:     { current: (cur["add_to_cart"]    || {}).count   || 0, previous: (prev["add_to_cart"]    || {}).count   || 0 },
+    beginCheckout: { current: (cur["begin_checkout"] || {}).count   || 0, previous: (prev["begin_checkout"] || {}).count   || 0 },
+    signUp:        { current: (cur["sign_up"]        || {}).count   || 0, previous: (prev["sign_up"]        || {}).count   || 0 },
+    purchases:     { current: (cur["purchase"]       || {}).count   || 0, previous: (prev["purchase"]       || {}).count   || 0 },
+    revenue:       { current: (cur["purchase"]       || {}).revenue || 0, previous: (prev["purchase"]       || {}).revenue || 0 },
   };
 }
 
@@ -277,6 +295,15 @@ function formatDimMetric(res) {
   return rows.map(function(r) {
     var v = parseInt(r.metricValues[0].value,10)||0;
     return { label: r.dimensionValues[0].value, value: v, pct: total>0?Math.round(v/total*100):0 };
+  });
+}
+
+function formatConversionsBySource(res) {
+  return (res.rows || []).map(function(r) {
+    return {
+      source:      r.dimensionValues[0].value,
+      conversions: parseInt(r.metricValues[0].value, 10) || 0,
+    };
   });
 }
 

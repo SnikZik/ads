@@ -411,6 +411,29 @@
 
     .footer-brand { font-family: var(--font-display); font-size: 0.75rem; color: var(--ink-mute); }
     .footer-line  { font-family: var(--font-mono); font-size: 0.62rem; color: var(--ink-mute); }
+
+    /* ── Day filter ─────────────────────────── */
+    .day-filters { display: flex; gap: 0.2rem; }
+
+    .day-btn {
+      font-family: var(--font-mono);
+      font-size: 0.62rem;
+      padding: 0.18rem 0.48rem;
+      border-radius: 99px;
+      border: 1px solid var(--rule);
+      background: transparent;
+      color: var(--ink-mute);
+      cursor: pointer;
+      transition: border-color 0.12s, color 0.12s, background 0.12s;
+      line-height: 1.4;
+    }
+
+    .day-btn:hover  { border-color: var(--purple); color: var(--purple); }
+    .day-btn.active { background: var(--purple); border-color: var(--purple); color: #fff; }
+
+    /* ── Combined source+conv table ─────────── */
+    .conv-source-table td:last-child,
+    .conv-source-table th:last-child { text-align: left; color: var(--purple); }
   </style>
 </head>
 <body>
@@ -439,6 +462,13 @@
       <span class="client-label" id="hClientName">טוען...</span>
     </div>
     <div class="meta-row">
+      <div class="day-filters" id="dayFilters">
+        <button class="day-btn" data-days="7">7י</button>
+        <button class="day-btn" data-days="14">14י</button>
+        <button class="day-btn active" data-days="30">30י</button>
+        <button class="day-btn" data-days="60">60י</button>
+        <button class="day-btn" data-days="90">90י</button>
+      </div>
       <span class="badge" id="hPeriod">30 יום</span>
       <span class="updated" id="hUpdated">מתעדכן...</span>
     </div>
@@ -499,6 +529,21 @@
           </table>
         </div>
       </div>
+
+      <!-- Conversions by source table -->
+      <div id="convSourceSection" style="margin-top:1.75rem; display:none;">
+        <div class="section-title" style="margin-bottom:0.75rem;">ערוצים · סשנים והמרות</div>
+        <table class="data-table conv-source-table">
+          <thead>
+            <tr>
+              <th>ערוץ</th>
+              <th style="text-align:left;">סשנים</th>
+              <th style="text-align:left; color:var(--purple);">המרות</th>
+            </tr>
+          </thead>
+          <tbody id="convSourceBody"></tbody>
+        </table>
+      </div>
     </div>
 
     <!-- 2. Shopify Leads -->
@@ -536,13 +581,15 @@
 
   var COLORS = ["#4B2BE0","#C7BBF5","#0B0B0F","#ECE7DC","#6B6B72","#2A2A30"];
 
-  var cache      = null;
-  var sparkChart = null;
-  var srcChart   = null;
+  var cache       = null;
+  var sparkChart  = null;
+  var srcChart    = null;
+  var currentDays = 30;
 
   // ── Fetch ─────────────────────────────────
-  function load(isRefresh) {
-    fetch(CONFIG.appsScriptUrl + "?t=" + Date.now())
+  function load(isRefresh, days) {
+    days = days || currentDays;
+    fetch(CONFIG.appsScriptUrl + "?t=" + Date.now() + "&days=" + days)
       .then(function (r) { return r.json(); })
       .then(function (d) {
         if (d.error) throw new Error(d.error);
@@ -582,6 +629,7 @@
     }
 
     if (d.ga4)      renderGA4(d.ga4);
+    if (d.ga4)      renderConversionsBySource(d.ga4);
     if (d.ga4 && d.ga4.ecommerce) renderEcommerce(d.ga4.ecommerce);
     if (d.shopify)  renderShopify(d.shopify);
     if (d.facebook) renderFacebook(d.facebook);
@@ -680,6 +728,26 @@
       return '<tr>' +
         '<td class="cell-primary" title="' + esc(p.path) + '">' + esc(p.title) + '</td>' +
         '<td class="cell-mono">' + num(p.sessions) + '</td>' +
+        '</tr>';
+    }).join("");
+  }
+
+  // ── Conversions by Source ─────────────────
+  function renderConversionsBySource(ga4) {
+    var sources     = ga4.sources || [];
+    var convSources = ga4.conversionsBySource || [];
+    if (!sources.length && !convSources.length) return;
+
+    var convMap = {};
+    convSources.forEach(function (c) { convMap[c.source] = c.conversions; });
+
+    document.getElementById("convSourceSection").style.display = "block";
+    document.getElementById("convSourceBody").innerHTML = sources.map(function (s) {
+      var convs = convMap[s.label] || 0;
+      return '<tr>' +
+        '<td class="cell-primary">' + esc(s.label) + '</td>' +
+        '<td class="cell-mono">' + num(s.value) + ' <span style="color:var(--ink-mute)">(' + s.pct + '%)</span></td>' +
+        '<td class="cell-mono" style="color:' + (convs > 0 ? 'var(--purple)' : 'var(--ink-mute)') + ';">' + (convs > 0 ? convs : '—') + '</td>' +
         '</tr>';
     }).join("");
   }
@@ -813,6 +881,21 @@
   }
 
   // ── Boot ──────────────────────────────────
+  document.getElementById("dayFilters").addEventListener("click", function (e) {
+    var btn = e.target.closest(".day-btn");
+    if (!btn) return;
+    var days = parseInt(btn.dataset.days, 10);
+    if (days === currentDays) return;
+    currentDays = days;
+    document.querySelectorAll(".day-btn").forEach(function (b) { b.classList.remove("active"); });
+    btn.classList.add("active");
+    document.getElementById("convSourceSection").style.display = "none";
+    document.getElementById("ecomSection").style.display = "none";
+    document.getElementById("loadingEl").style.display = "flex";
+    document.getElementById("dash").style.display = "none";
+    load(false, currentDays);
+  });
+
   load(false);
   setInterval(function () { load(true); }, CONFIG.refreshMin * 60 * 1000);
 })();
