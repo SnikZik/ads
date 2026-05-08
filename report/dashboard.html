@@ -403,6 +403,61 @@
       color: var(--ink);
     }
 
+    /* ── FB Date / Time cells ───────────────── */
+    .fb-date {
+      display: block;
+      font-size: 0.8rem;
+      color: var(--ink);
+    }
+    .fb-time {
+      display: block;
+      font-size: 0.68rem;
+      color: var(--ink-mute);
+      font-family: var(--font-mono);
+    }
+    .fb-empty { color: var(--rule); }
+
+    /* ── FB Flag column ──────────────────────── */
+    .fb-flag-th, .fb-flag-td {
+      width: 1.6rem;
+      min-width: 1.6rem;
+      text-align: center;
+      padding-right: 0 !important;
+      padding-left: 0 !important;
+    }
+    .fb-flag-td { font-size: 0.9rem; color: #c03a2b; vertical-align: middle; }
+    .fb-alert-row td { background: rgba(192,57,43,0.04); }
+
+    /* ── FB Alerts summary ───────────────────── */
+    .fb-alerts-box {
+      background: rgba(192,57,43,0.06);
+      border: 1px solid rgba(192,57,43,0.18);
+      border-radius: var(--radius);
+      padding: 1rem 1.25rem;
+      margin-bottom: 1.25rem;
+    }
+    .fb-alerts-title {
+      font-family: var(--font-mono);
+      font-size: 0.65rem;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: #c03a2b;
+      margin-bottom: 0.7rem;
+    }
+    .fb-alert-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 0.35rem 0;
+      border-bottom: 1px solid rgba(192,57,43,0.1);
+      font-size: 0.8rem;
+      gap: 1rem;
+    }
+    .fb-alert-item:last-child { border-bottom: none; }
+    .fb-alert-name { color: var(--ink); font-weight: 500; }
+    .fb-alert-days { font-family: var(--font-mono); font-size: 0.72rem; color: #c03a2b; white-space: nowrap; }
+    .fb-alert-tip  { font-size: 0.75rem; color: var(--ink-mute); }
+
     /* ── FB Pager ───────────────────────────── */
     .fb-pager {
       display: flex;
@@ -589,7 +644,7 @@
         <span class="section-source">Google Sheets</span>
       </div>
       <div class="fb-grid" id="fbGrid"></div>
-      <table class="data-table" id="fbTable" style="margin-top:1.25rem;"></table>
+      <div id="fbTable" style="margin-top:1.25rem;overflow-x:auto;"></div>
       <div class="fb-pager" id="fbPager"></div>
     </div>
 
@@ -902,7 +957,68 @@
 
   // ── Facebook Leads ────────────────────────
   var _fbRows = [], _fbHeaders = [], _fbPage = 0;
-  var FB_PAGE_SIZE = 20;
+  var FB_PAGE_SIZE = 15;
+
+  // Columns that indicate a follow-up action was taken
+  function _fbActionCols() {
+    return _fbHeaders.filter(function (h) {
+      var hl = h.toLowerCase();
+      return hl.includes("approved") || hl.includes("ship") ||
+             hl.includes("tracking") || hl.includes("sent") ||
+             hl.includes("sms") || hl.includes("prokit") ||
+             hl.includes("called") || hl.includes("status") ||
+             hl.includes("respond");
+    });
+  }
+
+  // Parse a date from various formats (ISO, M/D/YYYY)
+  function _parseFbDate(val) {
+    if (!val) return null;
+    var s = String(val);
+    var d = new Date(s);
+    if (!isNaN(d.getTime())) return d;
+    var m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+    if (m) return new Date(parseInt(m[3]), parseInt(m[1]) - 1, parseInt(m[2]));
+    return null;
+  }
+
+  // Returns { days: N } if lead needs follow-up, else null
+  function _fbGetAlert(row) {
+    var actionCols = _fbActionCols();
+    var hasAction = actionCols.some(function (h) {
+      var v = row[h];
+      return v !== undefined && v !== null && String(v).trim() !== "" && String(v).trim().toLowerCase() !== "no";
+    });
+    if (hasAction) return null;
+
+    var dateCol = _fbHeaders.find(function (h) { return h.toLowerCase() === "date"; }) || _fbHeaders[0];
+    var d = _parseFbDate(row[dateCol]);
+    if (!d) return null;
+
+    var days = Math.floor((Date.now() - d.getTime()) / 86400000);
+    if (days < 2) return null;
+    return { days: days };
+  }
+
+  // Format a cell — splits datetime into two lines
+  function _fbFmtCell(val) {
+    var s = String(val !== undefined && val !== null ? val : "");
+    if (!s || s === "undefined") return '<span class="fb-empty">—</span>';
+
+    // ISO: 2026-04-28T16:53:43.000Z
+    var isoM = s.match(/^(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2})/);
+    if (isoM) {
+      return '<span class="fb-date">' + esc(isoM[1]) + '</span>' +
+             '<span class="fb-time">' + esc(isoM[2]) + '</span>';
+    }
+    // US: 4/28/2026 19:53:43
+    var usM = s.match(/^(\d{1,2}\/\d{1,2}\/\d{4})\s+(\d{1,2}:\d{2})/);
+    if (usM) {
+      return '<span class="fb-date">' + esc(usM[1]) + '</span>' +
+             '<span class="fb-time">' + esc(usM[2]) + '</span>';
+    }
+    return esc(s);
+  }
 
   function renderFacebook(fb) {
     if (!fb || fb.total === 0) return;
@@ -916,30 +1032,62 @@
 
     if (!fb.headers || !fb.headers.length) return;
     _fbHeaders = fb.headers;
-    _fbRows    = fb.rows || fb.recent || [];
-    _fbPage    = 0;
+    // Newest first
+    _fbRows = (fb.rows || fb.recent || []).slice().reverse();
+    _fbPage = 0;
     renderFbPage();
   }
 
   function renderFbPage() {
-    var start  = _fbPage * FB_PAGE_SIZE;
-    var slice  = _fbRows.slice(start, start + FB_PAGE_SIZE);
-    var total  = _fbRows.length;
-    var pages  = Math.ceil(total / FB_PAGE_SIZE);
+    var start = _fbPage * FB_PAGE_SIZE;
+    var slice = _fbRows.slice(start, start + FB_PAGE_SIZE);
+    var total = _fbRows.length;
+    var pages = Math.ceil(total / FB_PAGE_SIZE);
 
-    document.getElementById("fbTable").innerHTML =
+    // Build alerts summary (all rows, not just current page)
+    var alertRows = _fbRows.filter(function (r) { return !!_fbGetAlert(r); });
+    var alertHtml = "";
+    if (alertRows.length > 0) {
+      var nameCol = _fbHeaders.find(function (h) { return h.toLowerCase() === "name"; }) || _fbHeaders[1] || _fbHeaders[0];
+      alertHtml =
+        '<div class="fb-alerts-box">' +
+          '<div class="fb-alerts-title">⚠ ' + alertRows.length + ' לידים שדורשים המשך טיפול</div>' +
+          alertRows.map(function (r) {
+            var a = _fbGetAlert(r);
+            var name = esc(String(r[nameCol] || r[_fbHeaders[0]] || "—"));
+            var urgency = a.days >= 7 ? " · דחוף" : a.days >= 4 ? " · שים לב" : "";
+            return '<div class="fb-alert-item">' +
+              '<span class="fb-alert-name">' + name + '</span>' +
+              '<span class="fb-alert-days">' + a.days + ' ימים ללא מענה' + urgency + '</span>' +
+            '</div>';
+          }).join("") +
+        '</div>';
+    }
+
+    // Table
+    var tableHtml =
+      '<table class="data-table" style="min-width:100%;white-space:nowrap;">' +
       '<thead><tr>' +
+        '<th class="fb-flag-th"></th>' +
         _fbHeaders.map(function (h) { return '<th>' + esc(String(h)) + '</th>'; }).join("") +
       '</tr></thead>' +
       '<tbody>' +
         slice.map(function (row) {
-          return '<tr>' +
+          var alert = _fbGetAlert(row);
+          var rowCls = alert ? ' class="fb-alert-row"' : '';
+          var flag   = alert
+            ? '<td class="fb-flag-td" title="' + alert.days + ' ימים ללא מענה">⚑</td>'
+            : '<td class="fb-flag-td"></td>';
+          return '<tr' + rowCls + '>' + flag +
             _fbHeaders.map(function (h) {
-              return '<td>' + esc(String(row[h] !== undefined ? row[h] : "")) + '</td>';
+              return '<td>' + _fbFmtCell(row[h]) + '</td>';
             }).join("") +
           '</tr>';
         }).join("") +
-      '</tbody>';
+      '</tbody>' +
+      '</table>';
+
+    document.getElementById("fbTable").innerHTML = alertHtml + tableHtml;
 
     document.getElementById("fbPager").innerHTML =
       '<button onclick="_fbPage--;renderFbPage()" ' + (_fbPage === 0 ? 'disabled' : '') + '>→ הקודם</button>' +
