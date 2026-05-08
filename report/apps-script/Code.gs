@@ -122,7 +122,7 @@ function getGA4Data(startDate, endDate) {
     dimensionFilter: {
       filter: {
         fieldName: "eventName",
-        inListFilter: { values: ["add_to_cart", "begin_checkout", "sign_up", "purchase"] },
+        inListFilter: { values: ["add_to_cart", "view_item", "purchase", "form_submit"] },
       },
     },
   }, token);
@@ -135,17 +135,23 @@ function getGA4Data(startDate, endDate) {
     limit: 8,
   }, token);
 
+  // Events by channel: form_submit + view_item + add_to_cart
   var convSourceRes = apiPost(baseUrl, {
     dateRanges: [{ startDate: startDate, endDate: endDate }],
-    dimensions: [{ name: "sessionDefaultChannelGroup" }],
+    dimensions: [{ name: "sessionDefaultChannelGroup" }, { name: "eventName" }],
     metrics:    [{ name: "eventCount" }],
     dimensionFilter: {
       filter: {
         fieldName: "eventName",
-        stringFilter: { matchType: "EXACT", value: "purchase" },
+        inListFilter: { values: ["view_item", "add_to_cart", "form_submit", "purchase"] },
       },
     },
-    orderBys: [{ metric: { metricName: "eventCount" }, desc: true }],
+  }, token);
+
+  var durationBySourceRes = apiPost(baseUrl, {
+    dateRanges: [{ startDate: startDate, endDate: endDate }],
+    dimensions: [{ name: "sessionDefaultChannelGroup" }],
+    metrics:    [{ name: "averageSessionDuration" }],
   }, token);
 
   var pagesRes = apiPost(baseUrl, {
@@ -169,6 +175,7 @@ function getGA4Data(startDate, endDate) {
     ecommerce:           formatEcommerce(ecomRes),
     sources:             formatDimMetric(sourceRes),
     conversionsBySource: formatConversionsBySource(convSourceRes),
+    durationBySource:    formatDurationBySource(durationBySourceRes),
     pages:               formatPages(pagesRes),
     sparkline:           formatSparkline(sparkRes),
   };
@@ -280,11 +287,11 @@ function formatEcommerce(res) {
     if (period === "previous") { prev[name] = { count: count, revenue: revenue }; }
   });
   return {
-    addToCart:     { current: (cur["add_to_cart"]    || {}).count   || 0, previous: (prev["add_to_cart"]    || {}).count   || 0 },
-    beginCheckout: { current: (cur["begin_checkout"] || {}).count   || 0, previous: (prev["begin_checkout"] || {}).count   || 0 },
-    signUp:        { current: (cur["sign_up"]        || {}).count   || 0, previous: (prev["sign_up"]        || {}).count   || 0 },
-    purchases:     { current: (cur["purchase"]       || {}).count   || 0, previous: (prev["purchase"]       || {}).count   || 0 },
-    revenue:       { current: (cur["purchase"]       || {}).revenue || 0, previous: (prev["purchase"]       || {}).revenue || 0 },
+    addToCart:  { current: (cur["add_to_cart"]  || {}).count   || 0, previous: (prev["add_to_cart"]  || {}).count   || 0 },
+    viewItem:   { current: (cur["view_item"]    || {}).count   || 0, previous: (prev["view_item"]    || {}).count   || 0 },
+    formSubmit: { current: (cur["form_submit"]  || {}).count   || 0, previous: (prev["form_submit"]  || {}).count   || 0 },
+    purchases:  { current: (cur["purchase"]     || {}).count   || 0, previous: (prev["purchase"]     || {}).count   || 0 },
+    revenue:    { current: (cur["purchase"]     || {}).revenue || 0, previous: (prev["purchase"]     || {}).revenue || 0 },
   };
 }
 
@@ -297,13 +304,26 @@ function formatDimMetric(res) {
   });
 }
 
+// Returns { channel: { purchase: N, form_submit: M } }
 function formatConversionsBySource(res) {
-  return (res.rows || []).map(function(r) {
-    return {
-      source:      r.dimensionValues[0].value,
-      conversions: parseInt(r.metricValues[0].value, 10) || 0,
-    };
+  var result = {};
+  (res.rows || []).forEach(function(r) {
+    var channel   = r.dimensionValues[0].value;
+    var eventName = r.dimensionValues[1].value;
+    var count     = parseInt(r.metricValues[0].value, 10) || 0;
+    if (!result[channel]) result[channel] = {};
+    result[channel][eventName] = count;
   });
+  return result;
+}
+
+// Returns { channel: avgSessionDurationSeconds }
+function formatDurationBySource(res) {
+  var result = {};
+  (res.rows || []).forEach(function(r) {
+    result[r.dimensionValues[0].value] = parseFloat(r.metricValues[0].value) || 0;
+  });
+  return result;
 }
 
 function formatPages(res) {

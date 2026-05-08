@@ -403,6 +403,84 @@
       color: var(--ink);
     }
 
+    /* ── FB Date / Time cells ───────────────── */
+    .fb-date {
+      display: block;
+      font-size: 0.8rem;
+      color: var(--ink);
+    }
+    .fb-time {
+      display: block;
+      font-size: 0.68rem;
+      color: var(--ink-mute);
+      font-family: var(--font-mono);
+    }
+    .fb-empty { color: var(--rule); }
+
+    /* ── FB Flag column ──────────────────────── */
+    .fb-flag-th, .fb-flag-td {
+      width: 1.6rem;
+      min-width: 1.6rem;
+      text-align: center;
+      padding-right: 0 !important;
+      padding-left: 0 !important;
+    }
+    .fb-flag-td { font-size: 0.9rem; color: #c03a2b; vertical-align: middle; }
+    .fb-alert-row td { background: rgba(192,57,43,0.04); }
+
+    /* ── FB Alerts summary ───────────────────── */
+    .fb-alerts-box {
+      background: rgba(192,57,43,0.06);
+      border: 1px solid rgba(192,57,43,0.18);
+      border-radius: var(--radius);
+      padding: 1rem 1.25rem;
+      margin-bottom: 1.25rem;
+    }
+    .fb-alerts-title {
+      font-family: var(--font-mono);
+      font-size: 0.65rem;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: #c03a2b;
+      margin-bottom: 0.7rem;
+    }
+    .fb-alert-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 0.35rem 0;
+      border-bottom: 1px solid rgba(192,57,43,0.1);
+      font-size: 0.8rem;
+      gap: 1rem;
+    }
+    .fb-alert-item:last-child { border-bottom: none; }
+    .fb-alert-name { color: var(--ink); font-weight: 500; }
+    .fb-alert-days { font-family: var(--font-mono); font-size: 0.72rem; color: #c03a2b; white-space: nowrap; }
+    .fb-alert-tip  { font-size: 0.75rem; color: var(--ink-mute); }
+
+    /* ── FB Pager ───────────────────────────── */
+    .fb-pager {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      margin-top: 1rem;
+      font-family: var(--font-mono);
+      font-size: 0.72rem;
+      color: var(--ink-mute);
+    }
+    .fb-pager button {
+      background: none;
+      border: 1px solid var(--rule);
+      border-radius: 4px;
+      padding: 0.3rem 0.8rem;
+      font-family: var(--font-mono);
+      font-size: 0.72rem;
+      cursor: pointer;
+      color: var(--ink);
+    }
+    .fb-pager button:disabled { opacity: 0.3; cursor: default; }
+    .fb-pager button:not(:disabled):hover { border-color: var(--purple); color: var(--purple); }
+
     /* ── Stale warning ───────────────────────── */
     .stale-bar {
       background: rgba(192,57,43,0.07);
@@ -456,11 +534,11 @@
     </div>
     <div class="meta-row">
       <select id="periodSelect" class="period-select">
-        <option value="today">היום</option>
+        <option value="today" selected>היום</option>
         <option value="yesterday">אתמול</option>
         <option value="7">7 ימים אחרונים</option>
         <option value="14">14 יום אחרונים</option>
-        <option value="30" selected>30 יום אחרונים</option>
+        <option value="30">30 יום אחרונים</option>
         <option value="60">60 יום אחרונים</option>
         <option value="90">90 יום אחרונים</option>
       </select>
@@ -519,8 +597,11 @@
               <tr>
                 <th>ערוץ</th>
                 <th style="text-align:left;">סשנים</th>
-                <th style="text-align:left;color:var(--purple);">רכישות</th>
-                <th style="text-align:left;">המרה</th>
+                <th style="text-align:left;">צפ׳ מוצר</th>
+                <th style="text-align:left;">הוספה לסל</th>
+                <th style="text-align:left;color:var(--purple);">הרשמות</th>
+                <th style="text-align:left;">רכישות</th>
+                <th style="text-align:left;">זמן</th>
               </tr>
             </thead>
             <tbody id="chanPerfBody"></tbody>
@@ -548,7 +629,7 @@
     </div>
 
     <!-- 2. Shopify Leads -->
-    <div class="section">
+    <div class="section" id="shopifySection">
       <div class="section-header">
         <span class="section-title">לידים</span>
         <span class="section-source">Shopify Forms</span>
@@ -563,7 +644,8 @@
         <span class="section-source">Google Sheets</span>
       </div>
       <div class="fb-grid" id="fbGrid"></div>
-      <table class="data-table" id="fbTable" style="margin-top:1.25rem;"></table>
+      <div id="fbTable" style="margin-top:1.25rem;overflow-x:auto;"></div>
+      <div class="fb-pager" id="fbPager"></div>
     </div>
 
     <div class="footer">
@@ -585,7 +667,7 @@
   var cache      = null;
   var sparkChart = null;
   var srcChart   = null;
-  var currentMode = "30";
+  var currentMode = "today";
 
   // ── Date helpers ──────────────────────────
   function localStr(d) {
@@ -731,10 +813,9 @@
     });
 
     // Sources donut
-    var sources     = ga4.sources || [];
-    var convSources = ga4.conversionsBySource || [];
-    var convMap     = {};
-    convSources.forEach(function (c) { convMap[c.source] = c.conversions; });
+    var sources      = ga4.sources || [];
+    var convSources  = ga4.conversionsBySource || {};   // { channel: { purchase: N, form_submit: M } }
+    var durationMap  = ga4.durationBySource    || {};   // { channel: seconds }
 
     var ctx2 = document.getElementById("sourceChart").getContext("2d");
     if (srcChart) srcChart.destroy();
@@ -765,12 +846,15 @@
                 return sources[c[0].dataIndex] ? sources[c[0].dataIndex].label : "";
               },
               label: function (c) {
-                var s = sources[c.dataIndex];
-                var conv = convMap[s ? s.label : ""] || 0;
-                var lines = [
-                  "סשנים:   " + num(c.parsed) + " (" + (s ? s.pct : 0) + "%)",
-                ];
-                if (conv > 0) lines.push("רכישות:  " + conv);
+                var s          = sources[c.dataIndex];
+                var ch         = convSources[s ? s.label : ""] || {};
+                var formSubmit = ch["form_submit"] || 0;
+                var viewItem   = ch["view_item"]   || 0;
+                var secs       = durationMap[s ? s.label : ""] || 0;
+                var lines      = ["סשנים:   " + num(c.parsed) + " (" + (s ? s.pct : 0) + "%)"];
+                if (formSubmit > 0) lines.push("הרשמות:  " + formSubmit);
+                if (viewItem   > 0) lines.push("צפ׳ מוצר: " + num(viewItem));
+                if (secs       > 0) lines.push("זמן:     " + dur(secs));
                 return lines;
               },
             },
@@ -781,9 +865,13 @@
 
     // Combined channel performance table
     document.getElementById("chanPerfBody").innerHTML = sources.map(function (s, i) {
-      var conv = convMap[s.label] || 0;
-      var rate = s.value > 0 ? ((conv / s.value) * 100).toFixed(2) + "%" : "—";
-      var barW = Math.round(s.pct * 0.8); // max ~80px visual
+      var ch         = convSources[s.label] || {};
+      var viewItem   = ch["view_item"]   || 0;
+      var addToCart  = ch["add_to_cart"] || 0;
+      var formSubmit = ch["form_submit"] || 0;
+      var purchases  = ch["purchase"]    || 0;
+      var secs       = durationMap[s.label] || 0;
+      var barW       = Math.round(s.pct * 0.8);
       return '<tr>' +
         '<td>' +
           '<div class="chan-bar-wrap">' +
@@ -792,8 +880,11 @@
           '</div>' +
         '</td>' +
         '<td class="cell-mono">' + num(s.value) + ' <span style="color:var(--ink-mute)">(' + s.pct + '%)</span></td>' +
-        '<td class="' + (conv > 0 ? "cell-conv" : "cell-mono") + '">' + (conv > 0 ? conv : "—") + '</td>' +
-        '<td class="cell-mono" style="color:' + (conv > 0 ? "var(--green)" : "var(--ink-mute)") + ';">' + rate + '</td>' +
+        '<td class="cell-mono">' + (viewItem   > 0 ? num(viewItem)   : "—") + '</td>' +
+        '<td class="cell-mono">' + (addToCart  > 0 ? num(addToCart)  : "—") + '</td>' +
+        '<td class="' + (formSubmit > 0 ? "cell-conv" : "cell-mono") + '">' + (formSubmit > 0 ? formSubmit : "—") + '</td>' +
+        '<td class="cell-mono">' + (purchases  > 0 ? num(purchases)  : "—") + '</td>' +
+        '<td class="cell-mono">' + (secs > 0 ? dur(secs) : "—") + '</td>' +
         '</tr>';
     }).join("");
 
@@ -813,10 +904,10 @@
     document.getElementById("ecomSection").style.display = "block";
 
     var cards = [
-      { label: "הוספה לסל",      cur: ec.addToCart.current,      prev: ec.addToCart.previous,     fmt: num },
-      { label: "התחלת צ׳קאאוט",  cur: ec.beginCheckout.current,  prev: ec.beginCheckout.previous,  fmt: num },
-      { label: "הרשמות",         cur: ec.signUp.current,          prev: ec.signUp.previous,         fmt: num },
-      { label: "רכישות",         cur: ec.purchases.current,       prev: ec.purchases.previous,      fmt: num },
+      { label: "הוספה לסל",    cur: (ec.addToCart  ||{}).current||0, prev: (ec.addToCart  ||{}).previous||0, fmt: num },
+      { label: "צפייה במוצר", cur: (ec.viewItem   ||{}).current||0, prev: (ec.viewItem   ||{}).previous||0, fmt: num },
+      { label: "הרשמות",      cur: (ec.formSubmit ||{}).current||0, prev: (ec.formSubmit ||{}).previous||0, fmt: num },
+      { label: "רכישות",      cur: (ec.purchases  ||{}).current||0, prev: (ec.purchases  ||{}).previous||0, fmt: num },
       { label: "סה״כ מכירות",    cur: ec.revenue.current,         prev: ec.revenue.previous,        fmt: rev },
     ];
 
@@ -834,6 +925,7 @@
   function renderShopify(sh) {
     var pro  = sh.pro        || { total: 0, newMonth: 0, recent: [] };
     var news = sh.newsletter || { total: 0, newMonth: 0 };
+
 
     var recentHtml = "";
     if (pro.recent && pro.recent.length) {
@@ -864,6 +956,70 @@
   }
 
   // ── Facebook Leads ────────────────────────
+  var _fbRows = [], _fbHeaders = [], _fbPage = 0;
+  var FB_PAGE_SIZE = 15;
+
+  // Columns that indicate a follow-up action was taken
+  function _fbActionCols() {
+    return _fbHeaders.filter(function (h) {
+      var hl = h.toLowerCase();
+      return hl.includes("approved") || hl.includes("ship") ||
+             hl.includes("tracking") || hl.includes("sent") ||
+             hl.includes("sms") || hl.includes("prokit") ||
+             hl.includes("called") || hl.includes("status") ||
+             hl.includes("respond");
+    });
+  }
+
+  // Parse a date from various formats (ISO, M/D/YYYY)
+  function _parseFbDate(val) {
+    if (!val) return null;
+    var s = String(val);
+    var d = new Date(s);
+    if (!isNaN(d.getTime())) return d;
+    var m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+    if (m) return new Date(parseInt(m[3]), parseInt(m[1]) - 1, parseInt(m[2]));
+    return null;
+  }
+
+  // Returns { days: N } if lead needs follow-up, else null
+  function _fbGetAlert(row) {
+    var actionCols = _fbActionCols();
+    var hasAction = actionCols.some(function (h) {
+      var v = row[h];
+      return v !== undefined && v !== null && String(v).trim() !== "" && String(v).trim().toLowerCase() !== "no";
+    });
+    if (hasAction) return null;
+
+    var dateCol = _fbHeaders.find(function (h) { return h.toLowerCase() === "date"; }) || _fbHeaders[0];
+    var d = _parseFbDate(row[dateCol]);
+    if (!d) return null;
+
+    var days = Math.floor((Date.now() - d.getTime()) / 86400000);
+    if (days < 2) return null;
+    return { days: days };
+  }
+
+  // Format a cell — splits datetime into two lines
+  function _fbFmtCell(val) {
+    var s = String(val !== undefined && val !== null ? val : "");
+    if (!s || s === "undefined") return '<span class="fb-empty">—</span>';
+
+    // ISO: 2026-04-28T16:53:43.000Z
+    var isoM = s.match(/^(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2})/);
+    if (isoM) {
+      return '<span class="fb-date">' + esc(isoM[1]) + '</span>' +
+             '<span class="fb-time">' + esc(isoM[2]) + '</span>';
+    }
+    // US: 4/28/2026 19:53:43
+    var usM = s.match(/^(\d{1,2}\/\d{1,2}\/\d{4})\s+(\d{1,2}:\d{2})/);
+    if (usM) {
+      return '<span class="fb-date">' + esc(usM[1]) + '</span>' +
+             '<span class="fb-time">' + esc(usM[2]) + '</span>';
+    }
+    return esc(s);
+  }
+
   function renderFacebook(fb) {
     if (!fb || fb.total === 0) return;
     document.getElementById("fbSection").style.display = "block";
@@ -874,22 +1030,69 @@
         '<div class="fb-val">' + num(fb.total) + '</div>' +
       '</div>';
 
-    if (!fb.recent || !fb.recent.length || !fb.headers || !fb.headers.length) return;
+    if (!fb.headers || !fb.headers.length) return;
+    _fbHeaders = fb.headers;
+    // Newest first
+    _fbRows = (fb.rows || fb.recent || []).slice().reverse();
+    _fbPage = 0;
+    renderFbPage();
+  }
 
-    var headers = fb.headers;
-    document.getElementById("fbTable").innerHTML =
+  function renderFbPage() {
+    var start = _fbPage * FB_PAGE_SIZE;
+    var slice = _fbRows.slice(start, start + FB_PAGE_SIZE);
+    var total = _fbRows.length;
+    var pages = Math.ceil(total / FB_PAGE_SIZE);
+
+    // Build alerts summary (all rows, not just current page)
+    var alertRows = _fbRows.filter(function (r) { return !!_fbGetAlert(r); });
+    var alertHtml = "";
+    if (alertRows.length > 0) {
+      var nameCol = _fbHeaders.find(function (h) { return h.toLowerCase() === "name"; }) || _fbHeaders[1] || _fbHeaders[0];
+      alertHtml =
+        '<div class="fb-alerts-box">' +
+          '<div class="fb-alerts-title">⚠ ' + alertRows.length + ' לידים שדורשים המשך טיפול</div>' +
+          alertRows.map(function (r) {
+            var a = _fbGetAlert(r);
+            var name = esc(String(r[nameCol] || r[_fbHeaders[0]] || "—"));
+            var urgency = a.days >= 7 ? " · דחוף" : a.days >= 4 ? " · שים לב" : "";
+            return '<div class="fb-alert-item">' +
+              '<span class="fb-alert-name">' + name + '</span>' +
+              '<span class="fb-alert-days">' + a.days + ' ימים ללא מענה' + urgency + '</span>' +
+            '</div>';
+          }).join("") +
+        '</div>';
+    }
+
+    // Table
+    var tableHtml =
+      '<table class="data-table" style="min-width:100%;white-space:nowrap;">' +
       '<thead><tr>' +
-        headers.map(function (h) { return '<th>' + esc(String(h)) + '</th>'; }).join("") +
+        '<th class="fb-flag-th"></th>' +
+        _fbHeaders.map(function (h) { return '<th>' + esc(String(h)) + '</th>'; }).join("") +
       '</tr></thead>' +
       '<tbody>' +
-        fb.recent.map(function (row) {
-          return '<tr>' +
-            headers.map(function (h) {
-              return '<td>' + esc(String(row[h] !== undefined ? row[h] : "")) + '</td>';
+        slice.map(function (row) {
+          var alert = _fbGetAlert(row);
+          var rowCls = alert ? ' class="fb-alert-row"' : '';
+          var flag   = alert
+            ? '<td class="fb-flag-td" title="' + alert.days + ' ימים ללא מענה">⚑</td>'
+            : '<td class="fb-flag-td"></td>';
+          return '<tr' + rowCls + '>' + flag +
+            _fbHeaders.map(function (h) {
+              return '<td>' + _fbFmtCell(row[h]) + '</td>';
             }).join("") +
           '</tr>';
         }).join("") +
-      '</tbody>';
+      '</tbody>' +
+      '</table>';
+
+    document.getElementById("fbTable").innerHTML = alertHtml + tableHtml;
+
+    document.getElementById("fbPager").innerHTML =
+      '<button onclick="_fbPage--;renderFbPage()" ' + (_fbPage === 0 ? 'disabled' : '') + '>→ הקודם</button>' +
+      '<span>עמוד ' + (_fbPage + 1) + ' מתוך ' + pages + ' · ' + total + ' לידים</span>' +
+      '<button onclick="_fbPage++;renderFbPage()" ' + (_fbPage >= pages - 1 ? 'disabled' : '') + '>← הבא</button>';
   }
 
   // ── Formatters ────────────────────────────
