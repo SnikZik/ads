@@ -69,12 +69,15 @@ function doPost(e) {
       sheet.appendRow(["timestamp", "name", "email", "tags", "type"]);
     }
 
-    var type = (body.tags || "").indexOf("pro_club") !== -1 ? "pro_club" : "newsletter";
+    // Handle both Shopify native webhook (first_name/last_name) and Flow (name)
+    var name = body.name || ((body.first_name || "") + " " + (body.last_name || "")).trim();
+    var tags = Array.isArray(body.tags) ? body.tags.join(", ") : (body.tags || "");
+    var type = tags.indexOf("pro_club") !== -1 ? "pro_club" : "newsletter";
     sheet.appendRow([
       new Date().toISOString(),
-      body.name  || "",
+      name,
       body.email || "",
-      body.tags  || "",
+      tags,
       type,
     ]);
     return respond({ ok: true });
@@ -86,6 +89,22 @@ function doPost(e) {
 // ─────────────────────────────────────────────
 //  GA4 — all queries use explicit date range
 // ─────────────────────────────────────────────
+
+// Countries to exclude from all GA4 queries
+var EXCLUDE_COUNTRY_FILTER = {
+  notFilter: {
+    filter: {
+      fieldName: "countryId",
+      inListFilter: { values: ["IL", "PH"] },
+    },
+  },
+};
+
+function withCountryFilter(existingFilter) {
+  if (!existingFilter) return EXCLUDE_COUNTRY_FILTER;
+  return { andGroup: { expressions: [EXCLUDE_COUNTRY_FILTER, existingFilter] } };
+}
+
 function getGA4Data(startDate, endDate) {
   var token   = ScriptApp.getOAuthToken();
   var baseUrl = "https://analyticsdata.googleapis.com/v1beta/" + CONFIG.GA4_PROPERTY_ID + ":runReport";
@@ -110,6 +129,7 @@ function getGA4Data(startDate, endDate) {
       { name: "bounceRate" },
       { name: "averageSessionDuration" },
     ],
+    dimensionFilter: withCountryFilter(null),
   }, token);
 
   var ecomRes = apiPost(baseUrl, {
@@ -119,12 +139,12 @@ function getGA4Data(startDate, endDate) {
     ],
     dimensions: [{ name: "eventName" }],
     metrics:    [{ name: "eventCount" }, { name: "purchaseRevenue" }],
-    dimensionFilter: {
+    dimensionFilter: withCountryFilter({
       filter: {
         fieldName: "eventName",
         inListFilter: { values: ["add_to_cart", "view_item", "purchase", "form_submit"] },
       },
-    },
+    }),
   }, token);
 
   var sourceRes = apiPost(baseUrl, {
@@ -132,6 +152,7 @@ function getGA4Data(startDate, endDate) {
     dimensions: [{ name: "sessionDefaultChannelGroup" }],
     metrics:    [{ name: "sessions" }],
     orderBys:   [{ metric: { metricName: "sessions" }, desc: true }],
+    dimensionFilter: withCountryFilter(null),
     limit: 8,
   }, token);
 
@@ -140,18 +161,19 @@ function getGA4Data(startDate, endDate) {
     dateRanges: [{ startDate: startDate, endDate: endDate }],
     dimensions: [{ name: "sessionDefaultChannelGroup" }, { name: "eventName" }],
     metrics:    [{ name: "eventCount" }],
-    dimensionFilter: {
+    dimensionFilter: withCountryFilter({
       filter: {
         fieldName: "eventName",
         inListFilter: { values: ["view_item", "add_to_cart", "form_submit", "purchase"] },
       },
-    },
+    }),
   }, token);
 
   var durationBySourceRes = apiPost(baseUrl, {
     dateRanges: [{ startDate: startDate, endDate: endDate }],
     dimensions: [{ name: "sessionDefaultChannelGroup" }],
     metrics:    [{ name: "averageSessionDuration" }],
+    dimensionFilter: withCountryFilter(null),
   }, token);
 
   var pagesRes = apiPost(baseUrl, {
@@ -159,6 +181,7 @@ function getGA4Data(startDate, endDate) {
     dimensions: [{ name: "pageTitle" }, { name: "pagePath" }],
     metrics:    [{ name: "sessions" }, { name: "screenPageViews" }],
     orderBys:   [{ metric: { metricName: "sessions" }, desc: true }],
+    dimensionFilter: withCountryFilter(null),
     limit: 7,
   }, token);
 
@@ -167,6 +190,7 @@ function getGA4Data(startDate, endDate) {
     dimensions: [{ name: "date" }],
     metrics:    [{ name: "sessions" }],
     orderBys:   [{ dimension: { dimensionName: "date" } }],
+    dimensionFilter: withCountryFilter(null),
   }, token);
 
   var rows = overviewRes.rows || [];
@@ -200,7 +224,7 @@ function getShopifyLeads() {
     var news = rows.filter(function (r) { return r[4] === "newsletter"; });
 
     function newThisMonth(arr) {
-      return arr.filter(function (r) { return r[0] >= monthStart; }).length;
+      return arr.filter(function (r) { return new Date(r[0]) >= monthStart; }).length;
     }
 
     function recentRows(arr) {
