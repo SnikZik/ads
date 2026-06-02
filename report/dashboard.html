@@ -784,10 +784,15 @@
 
     document.getElementById("kpiGrid").innerHTML = cards.map(function (c) {
       var d = delta(c.curVal, c.prevVal, c.inv);
+      var sub = "";
+      if (c.key === "avgSessionDuration") {
+        sub = '<div style="font-family:var(--font-mono);font-size:.55rem;color:var(--ink-mute);margin-top:.3rem;letter-spacing:.04em;line-height:1.3;">חושב על ' + num(engSess) + ' סשנים אמיתיים בלבד</div>';
+      }
       return '<div class="kpi-card">' +
         '<div class="kpi-label">' + c.label + '</div>' +
         '<div class="kpi-value">' + c.fmt(c.curVal) + '</div>' +
         '<div class="kpi-delta ' + d.cls + '">' + d.txt + '</div>' +
+        sub +
         '</div>';
     }).join("");
 
