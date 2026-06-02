@@ -767,18 +767,18 @@
     var cur  = ga4.overview.current  || {};
     var prev = ga4.overview.previous || {};
 
-    var totalU = cur.totalUsers || 0;
-    var actU   = cur.activeUsers || 0;
-    var nonEng = Math.max(0, totalU - actU);
-    var prevTotalU = prev.totalUsers || 0;
-    var prevActU   = prev.activeUsers || 0;
-    var prevNonEng = Math.max(0, prevTotalU - prevActU);
+    var totalSess  = cur.sessions || 0;
+    var engSess    = cur.engagedSessions || 0;
+    var nonEng     = Math.max(0, totalSess - engSess);
+    var prevSess   = prev.sessions || 0;
+    var prevEng    = prev.engagedSessions || 0;
+    var prevNonEng = Math.max(0, prevSess - prevEng);
 
     var cards = [
-      { label: "סשנים",                 key: "sessions",           fmt: num,  curVal: cur.sessions || 0,   prevVal: prev.sessions || 0 },
-      { label: "משתמשים סה״כ",         key: "totalUsers",         fmt: num,  curVal: totalU,              prevVal: prevTotalU },
-      { label: "ללא engagement",        key: "nonEngaged",         fmt: num,  curVal: nonEng,              prevVal: prevNonEng, inv: true },
-      { label: "משתמשים אמיתיים",      key: "activeUsers",        fmt: num,  curVal: actU,                prevVal: prevActU },
+      { label: "סשנים סה״כ",            key: "sessions",           fmt: num,  curVal: totalSess,                   prevVal: prevSess },
+      { label: "ללא engagement",        key: "nonEngaged",         fmt: num,  curVal: nonEng,                      prevVal: prevNonEng, inv: true },
+      { label: "סשנים אמיתיים",         key: "engagedSessions",    fmt: num,  curVal: engSess,                     prevVal: prevEng },
+      { label: "משתמשים",               key: "totalUsers",         fmt: num,  curVal: cur.totalUsers || 0,         prevVal: prev.totalUsers || 0 },
       { label: "זמן ממוצע",             key: "avgSessionDuration", fmt: dur,  curVal: cur.avgSessionDuration || 0, prevVal: prev.avgSessionDuration || 0 },
     ];
 
