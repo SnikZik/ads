@@ -767,31 +767,27 @@
     var cur  = ga4.overview.current  || {};
     var prev = ga4.overview.previous || {};
 
+    var totalU = cur.totalUsers || 0;
+    var actU   = cur.activeUsers || 0;
+    var nonEng = Math.max(0, totalU - actU);
+    var prevTotalU = prev.totalUsers || 0;
+    var prevActU   = prev.activeUsers || 0;
+    var prevNonEng = Math.max(0, prevTotalU - prevActU);
+
     var cards = [
-      { label: "סשנים",          key: "sessions",           fmt: num },
-      { label: "משתמשים",        key: "totalUsers",          fmt: num },
-      { label: "משתמשים חדשים",  key: "newUsers",            fmt: num },
-      { label: "זמן ממוצע",      key: "avgSessionDuration",  fmt: dur },
+      { label: "סשנים",                 key: "sessions",           fmt: num,  curVal: cur.sessions || 0,   prevVal: prev.sessions || 0 },
+      { label: "משתמשים סה״כ",         key: "totalUsers",         fmt: num,  curVal: totalU,              prevVal: prevTotalU },
+      { label: "ללא engagement",        key: "nonEngaged",         fmt: num,  curVal: nonEng,              prevVal: prevNonEng, inv: true },
+      { label: "משתמשים אמיתיים",      key: "activeUsers",        fmt: num,  curVal: actU,                prevVal: prevActU },
+      { label: "זמן ממוצע",             key: "avgSessionDuration", fmt: dur,  curVal: cur.avgSessionDuration || 0, prevVal: prev.avgSessionDuration || 0 },
     ];
 
     document.getElementById("kpiGrid").innerHTML = cards.map(function (c) {
-      var cv = cur[c.key]  || 0;
-      var pv = prev[c.key] || 0;
-      var d  = delta(cv, pv, c.inv);
-      var sub = "";
-      if (c.key === "avgSessionDuration") {
-        var totalUsers = cur.totalUsers || 0;
-        var actUsers   = cur.activeUsers || 0;
-        var filteredU  = Math.max(0, totalUsers - actUsers);
-        if (filteredU > 0) {
-          sub = '<div style="font-family:var(--font-mono);font-size:.55rem;color:var(--ink-mute);margin-top:.3rem;letter-spacing:.04em;">ממוצע על ' + num(actUsers) + ' משתמשים פעילים בלבד</div>';
-        }
-      }
+      var d = delta(c.curVal, c.prevVal, c.inv);
       return '<div class="kpi-card">' +
         '<div class="kpi-label">' + c.label + '</div>' +
-        '<div class="kpi-value">' + c.fmt(cv) + '</div>' +
+        '<div class="kpi-value">' + c.fmt(c.curVal) + '</div>' +
         '<div class="kpi-delta ' + d.cls + '">' + d.txt + '</div>' +
-        sub +
         '</div>';
     }).join("");
 
