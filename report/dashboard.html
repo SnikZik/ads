@@ -619,8 +619,8 @@
       <table class="data-table">
         <thead>
           <tr>
-            <th>אירוע</th>
-            <th style="text-align:left;">סשנים שעשו</th>
+            <th>ערוץ</th>
+            <th style="text-align:left;">אירועים</th>
             <th style="text-align:left;">זמן ממוצע באתר</th>
           </tr>
         </thead>
@@ -914,22 +914,47 @@
         '</tr>';
     }).join("");
 
-    // Duration by event
-    var dbe = ga4.durationByEvent || {};
+    // Duration by event — channels nested under each event
+    var dbe   = ga4.durationByEvent || {};
+    var convs = ga4.conversionsBySource || {};
     var eventLabels = {
       view_item:   "צפייה במוצר",
       add_to_cart: "הוספה לסל",
       form_submit: "הרשמה",
       purchase:    "רכישה",
     };
-    document.getElementById("durByEventBody").innerHTML = Object.keys(eventLabels).map(function (k) {
-      var d = dbe[k] || { sessions: 0, avgEngagement: 0 };
-      return '<tr>' +
-        '<td class="cell-primary">' + eventLabels[k] + '</td>' +
-        '<td class="cell-mono">' + (d.sessions > 0 ? num(d.sessions) : "—") + '</td>' +
-        '<td class="cell-mono">' + (d.sessions > 0 ? dur(d.avgEngagement) : "—") + '</td>' +
-        '</tr>';
-    }).join("");
+    var rows = [];
+    Object.keys(eventLabels).forEach(function (k) {
+      var channels = dbe[k] || [];
+      var totalEvents = channels.reduce(function (s, c) {
+        return s + ((convs[c.channel] || {})[k] || 0);
+      }, 0);
+
+      rows.push(
+        '<tr style="background:rgba(75,43,224,0.04);">' +
+        '<td colspan="3" style="padding:0.6rem 0.75rem;font-weight:600;color:var(--purple);font-family:var(--font-display);">' +
+        eventLabels[k] + (totalEvents > 0 ? ' · ' + num(totalEvents) + ' אירועים' : '') +
+        '</td></tr>'
+      );
+
+      var anyRow = false;
+      channels.forEach(function (c) {
+        var evCount = (convs[c.channel] || {})[k] || 0;
+        if (evCount === 0) return;
+        anyRow = true;
+        rows.push(
+          '<tr>' +
+          '<td style="padding-right:1.5rem;">└ ' + esc(c.channel) + '</td>' +
+          '<td class="cell-mono">' + num(evCount) + '</td>' +
+          '<td class="cell-mono">' + dur(c.avgDuration) + '</td>' +
+          '</tr>'
+        );
+      });
+      if (!anyRow) {
+        rows.push('<tr><td style="padding-right:1.5rem;color:var(--ink-mute);">—</td><td class="cell-mono">—</td><td class="cell-mono">—</td></tr>');
+      }
+    });
+    document.getElementById("durByEventBody").innerHTML = rows.join("");
   }
 
   // ── E-Commerce ────────────────────────────
