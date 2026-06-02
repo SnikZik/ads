@@ -17,6 +17,20 @@ var CONFIG = {
 // ─────────────────────────────────────────────
 function doGet(e) {
   try {
+    // ?raw=1 → return first GA4 API response verbatim for debugging
+    if (e && e.parameter && e.parameter.raw) {
+      var token   = ScriptApp.getOAuthToken();
+      var baseUrl = "https://analyticsdata.googleapis.com/v1beta/" + CONFIG.GA4_PROPERTY_ID + ":runReport";
+      var today2  = formatDate(new Date());
+      var start2  = formatDate(daysAgo(14));
+      var rawRes  = apiPost(baseUrl, {
+        dateRanges: [{ startDate: start2, endDate: today2, name: "current" }],
+        metrics:    [{ name: "sessions" }],
+        dimensionFilter: EXCLUDE_COUNTRY_FILTER,
+      }, token);
+      return respond({ _raw: rawRes });
+    }
+
     var startDate, endDate, label;
     var today = formatDate(new Date());
 
@@ -92,10 +106,10 @@ function doPost(e) {
 
 // Countries to exclude from all GA4 queries
 var EXCLUDE_COUNTRY_FILTER = {
-  notFilter: {
+  notExpression: {
     filter: {
-      fieldName: "countryId",
-      inListFilter: { values: ["IL", "PH"] },
+      fieldName: "country",
+      inListFilter: { values: ["Israel", "Philippines"] },
     },
   },
 };

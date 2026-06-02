@@ -610,6 +610,24 @@
       </div>
     </div>
 
+    <!-- Duration by Event -->
+    <div class="section" id="durByEventSection">
+      <div class="section-header">
+        <span class="section-title">זמן באתר לפי אירוע</span>
+        <span class="section-source">Google Analytics</span>
+      </div>
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>אירוע</th>
+            <th style="text-align:left;">סשנים שעשו</th>
+            <th style="text-align:left;">זמן ממוצע באתר</th>
+          </tr>
+        </thead>
+        <tbody id="durByEventBody"></tbody>
+      </table>
+    </div>
+
     <!-- Pages -->
     <div class="section">
       <div class="section-header">
@@ -893,6 +911,23 @@
         '<td class="cell-primary" title="' + esc(p.path) + '">' + esc(p.title) + '</td>' +
         '<td class="cell-mono">' + num(p.sessions) + '</td>' +
         '<td class="cell-mono">' + num(p.views) + '</td>' +
+        '</tr>';
+    }).join("");
+
+    // Duration by event
+    var dbe = ga4.durationByEvent || {};
+    var eventLabels = {
+      view_item:   "צפייה במוצר",
+      add_to_cart: "הוספה לסל",
+      form_submit: "הרשמה",
+      purchase:    "רכישה",
+    };
+    document.getElementById("durByEventBody").innerHTML = Object.keys(eventLabels).map(function (k) {
+      var d = dbe[k] || { sessions: 0, avgEngagement: 0 };
+      return '<tr>' +
+        '<td class="cell-primary">' + eventLabels[k] + '</td>' +
+        '<td class="cell-mono">' + (d.sessions > 0 ? num(d.sessions) : "—") + '</td>' +
+        '<td class="cell-mono">' + (d.sessions > 0 ? dur(d.avgEngagement) : "—") + '</td>' +
         '</tr>';
     }).join("");
   }
