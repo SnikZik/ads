@@ -778,10 +778,20 @@
       var cv = cur[c.key]  || 0;
       var pv = prev[c.key] || 0;
       var d  = delta(cv, pv, c.inv);
+      var sub = "";
+      if (c.key === "avgSessionDuration") {
+        var totalSess = cur.sessions || 0;
+        var engSess   = cur.engagedSessions || 0;
+        var filtered  = Math.max(0, totalSess - engSess);
+        if (filtered > 0) {
+          sub = '<div style="font-family:var(--font-mono);font-size:.55rem;color:var(--ink-mute);margin-top:.3rem;letter-spacing:.04em;">סוננו ' + num(filtered) + ' ללא engagement</div>';
+        }
+      }
       return '<div class="kpi-card">' +
         '<div class="kpi-label">' + c.label + '</div>' +
         '<div class="kpi-value">' + c.fmt(cv) + '</div>' +
         '<div class="kpi-delta ' + d.cls + '">' + d.txt + '</div>' +
+        sub +
         '</div>';
     }).join("");
 
