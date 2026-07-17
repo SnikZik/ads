@@ -914,15 +914,20 @@ function biomeAt(dist) {
 /* ---------- levels ---------- */
 let curLevel = parseInt(store.get('mh_level', '1'), 10) || 1;
 function levelCfg(lvl) {
-  const biome = (lvl - 1) % BIOMES.length;
+  // levels never end: worlds go sequential, then shuffle from level 9 so it stays fresh
+  const biome = lvl <= BIOMES.length ? (lvl - 1) % BIOMES.length : (lvl * 5 + 3) % BIOMES.length;
   const missions = [
-    { type: 'stars', target: 8 + lvl * 2, label: n => 'לאסוף ' + n + ' כוכבים ⭐', say: n => 'לאסוף ' + n + ' כוכבים' },
-    { type: 'lava',  target: 2 + Math.ceil(lvl / 2), label: n => 'לעבור ' + n + ' בריכות לבה 🔥', say: n => 'לעבור ' + n + ' בריכות לבה בלי ליפול' },
-    { type: 'fly',   target: 4 + lvl, label: n => 'לעוף ' + n + ' שניות 🪽', say: n => 'לעוף ' + n + ' שניות עם הכנפיים' }
+    { type: 'stars', target: Math.min(8 + lvl * 2, 30), label: n => 'לאסוף ' + n + ' כוכבים ⭐', say: n => 'לאסוף ' + n + ' כוכבים' },
+    { type: 'lava',  target: Math.min(2 + Math.ceil(lvl / 2), 8), label: n => 'לעבור ' + n + ' בריכות לבה 🔥', say: n => 'לעבור ' + n + ' בריכות לבה בלי ליפול' },
+    { type: 'fly',   target: Math.min(4 + lvl, 15), label: n => 'לעוף ' + n + ' שניות 🪽', say: n => 'לעוף ' + n + ' שניות עם הכנפיים' }
   ];
   // surprise twist from level 4 up
   const twists = ['none', 'turbo', 'lowgrav', 'rich'];
   const twist = lvl < 4 ? 'none' : twists[lvl % twists.length];
+  // bosses: every 3rd level, and from level 9 almost every other level
+  let boss = null;
+  if (lvl % 3 === 0) boss = (lvl / 3) % 2 === 1 ? 'dino' : 'dragon';
+  else if (lvl >= 9 && lvl % 3 === 1) boss = lvl % 2 === 1 ? 'dragon' : 'dino';
   return {
     len: Math.min(300 + lvl * 60, 900),
     biome: biome,
@@ -931,8 +936,7 @@ function levelCfg(lvl) {
     twist: twist,
     // gaps tighten as levels climb — the real difficulty curve
     gapMul: clamp(1.55 - lvl * 0.035, 1.05, 1.55),
-    // a giant boss guards every 3rd level's final stretch
-    boss: lvl % 3 === 0 ? ((lvl / 3) % 2 === 1 ? 'dino' : 'dragon') : null
+    boss: boss
   };
 }
 const TWIST_TEXT = {
@@ -1305,7 +1309,14 @@ function spawnWave() {
   let choices;
   if (d < 60) choices = ['stars'];
   else if (d < 130) choices = ['stars', 'lava', 'stars'];
-  else choices = biomeChoices(biomeAt(d));
+  else {
+    choices = biomeChoices(biomeAt(d)).slice();
+    const lvlNow = G.mode === 'level' ? curLevel : Math.floor(d / 400) + 2;
+    // dinosaurs and dragons roam the road from level 2
+    if (lvlNow >= 2) choices.push('minidino', 'minidragon');
+    // sky hunters punish nonstop flying from level 3
+    if (lvlNow >= 3) choices.push('storm', 'hawk');
+  }
   const pick = choices[Math.floor(Math.random() * choices.length)];
   let width = 0;
 
@@ -1343,6 +1354,20 @@ function spawnWave() {
   } else if (pick === 'aliendog') {
     G.obstacles.push({ type: 'aliendog', x: sx, w: 64 * U, baseY: groundY() - rand(50, 80) * U, t: rand(0, 6), hit: false });
     width = 64 * U;
+  } else if (pick === 'minidino') {
+    G.obstacles.push({ type: 'minidino', x: sx, w: 78 * U, t: rand(0, 6), hit: false });
+    width = 78 * U;
+  } else if (pick === 'minidragon') {
+    G.obstacles.push({ type: 'minidragon', x: sx, w: 70 * U, baseY: groundY() - rand(90, 170) * U, t: rand(0, 6), hit: false });
+    width = 70 * U;
+  } else if (pick === 'storm') {
+    // lightning cloud parked in the flight lane
+    G.obstacles.push({ type: 'storm', x: sx, w: 90 * U, baseY: groundY() - rand(185, 235) * U, t: rand(0, 6), hit: false });
+    width = 90 * U;
+  } else if (pick === 'hawk') {
+    // fast diving hawk — surprises whoever camps in the sky
+    G.obstacles.push({ type: 'hawk', x: sx + 300 * U, w: 58 * U, baseY: groundY() - rand(150, 220) * U, t: rand(0, 6), hit: false });
+    width = 58 * U;
   } else {
     addStarArc(sx, groundY() - rand(60, 190) * U, 4);
     width = 150 * U;
@@ -1779,7 +1804,10 @@ function update(dt) {
   const hby1 = gy - G.y - hs * 0.72, hby2 = gy - G.y;
 
   // obstacles
-  for (const o of G.obstacles) o.t += dt;
+  for (const o of G.obstacles) {
+    o.t += dt;
+    if (o.type === 'hawk') o.x -= G.speed * U * 0.8 * dt; // flies toward you, faster than the world
+  }
   G.obstacles = G.obstacles.filter(o => o.x + o.w - G.x > -200 * U);
   for (const o of G.obstacles) {
     const sx1 = o.x - G.x, sx2 = sx1 + o.w;
@@ -1799,15 +1827,23 @@ function update(dt) {
       if (o.hit) continue;
       let oy1, oy2;
       const bodyH = 52 * U;
-      if (o.type === 'birdfly' || o.type === 'octocat' || o.type === 'penguin') {
+      if (o.type === 'birdfly' || o.type === 'octocat' || o.type === 'penguin' || o.type === 'minidragon') {
         const yy = o.baseY + Math.sin(o.t * 2.2) * 26 * U;
         oy1 = yy - bodyH / 2; oy2 = yy + bodyH / 2;
       } else if (o.type === 'dogbee' || o.type === 'aliendog') {
         const yy = o.baseY + Math.sin(o.t * 3.1) * 10 * U;
         oy1 = yy - bodyH / 2; oy2 = yy + bodyH / 2;
+      } else if (o.type === 'hawk') {
+        const yy = o.baseY + Math.sin(o.t * 5) * 12 * U;
+        oy1 = yy - bodyH / 2; oy2 = yy + bodyH / 2;
+      } else if (o.type === 'storm') {
+        const yy = o.baseY;
+        oy1 = yy - 30 * U; oy2 = yy + 26 * U;
       } else if (o.type === 'fishbun' || o.type === 'gummy') {
         const hop = Math.abs(Math.sin(o.t * 3)) * 46 * U;
         oy1 = gy - hop - bodyH; oy2 = gy - hop;
+      } else if (o.type === 'minidino') {
+        oy1 = gy - 76 * U; oy2 = gy;
       } else {
         oy1 = gy - bodyH; oy2 = gy;
       }
@@ -1816,6 +1852,22 @@ function update(dt) {
         o.hit = true;
         spawnParticles((fx1 + fx2) / 2, (oy1 + oy2) / 2, 10, '#c9b8ff');
         loseHeart('animal');
+      }
+      // lightning bolt below the storm cloud, on a telegraphed cycle
+      if (o.type === 'storm' && !o.hit) {
+        const phase = o.t % 2.4;
+        if (phase > 1.85 && !o.boomed && sx1 > -100 && sx1 < W + 100) {
+          o.boomed = true;
+          beep(70, 35, 0.4, 'sawtooth', 0.1);
+        }
+        if (phase < 1.5) o.boomed = false;
+        if (phase > 1.85) { // bolt is live
+          const bx1 = sx1 + o.w / 2 - 24 * U, bx2 = sx1 + o.w / 2 + 24 * U;
+          const by1 = o.baseY + 20 * U, by2 = o.baseY + 165 * U;
+          if (hbx2 > bx1 && hbx1 < bx2 && hby2 > by1 && hby1 < by2) {
+            loseHeart('animal');
+          }
+        }
       }
     }
   }
@@ -2752,6 +2804,137 @@ function drawObstacle(o) {
     ctx.fillText('🐶', cx, yy - 2 * U);
     ctx.font = Math.round(15 * U) + 'px sans-serif';
     ctx.fillText('👽', cx + 14 * U, yy - 14 * U);
+  } else if (o.type === 'minidino') {
+    // דינוזאור בינוני — גרסה קטנה של הבוס
+    const cx = sx + o.w / 2, step = Math.sin(o.t * 8) * 8 * U;
+    ctx.strokeStyle = '#356a2b';
+    ctx.lineWidth = 9 * U;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(cx - 10 * U, gy - 30 * U); ctx.lineTo(cx - 10 * U + step, gy);
+    ctx.moveTo(cx + 12 * U, gy - 30 * U); ctx.lineTo(cx + 12 * U - step, gy);
+    ctx.stroke();
+    ctx.fillStyle = '#4a8a3a';
+    ctx.beginPath();
+    ctx.ellipse(cx, gy - 40 * U, 30 * U, 22 * U, -0.1, 0, 7);
+    ctx.fill();
+    // tail
+    ctx.beginPath();
+    ctx.moveTo(cx - 24 * U, gy - 45 * U);
+    ctx.quadraticCurveTo(cx - 55 * U, gy - 52 * U, cx - 62 * U, gy - 68 * U);
+    ctx.quadraticCurveTo(cx - 45 * U, gy - 44 * U, cx - 20 * U, gy - 32 * U);
+    ctx.closePath();
+    ctx.fill();
+    // head
+    ctx.beginPath();
+    ctx.ellipse(cx + 24 * U, gy - 64 * U, 17 * U, 13 * U, 0.2, 0, 7);
+    ctx.fill();
+    ctx.fillStyle = '#fff';
+    for (let i = 0; i < 3; i++) {
+      ctx.beginPath();
+      ctx.moveTo(cx + (28 + i * 5) * U, gy - 58 * U);
+      ctx.lineTo(cx + (30 + i * 5) * U, gy - 54 * U);
+      ctx.lineTo(cx + (32 + i * 5) * U, gy - 58 * U);
+      ctx.closePath();
+      ctx.fill();
+    }
+    ctx.beginPath(); ctx.arc(cx + 22 * U, gy - 69 * U, 5 * U, 0, 7); ctx.fill();
+    ctx.fillStyle = '#222';
+    ctx.beginPath(); ctx.arc(cx + 24 * U, gy - 68 * U, 2.4 * U, 0, 7); ctx.fill();
+  } else if (o.type === 'minidragon') {
+    // דרקון קטן מרחף ונושף עשן
+    const yy = o.baseY + Math.sin(o.t * 2.2) * 26 * U;
+    const cx = sx + o.w / 2;
+    const flap = Math.sin(o.t * 8) * 0.5;
+    for (const side of [-1, 1]) {
+      ctx.save();
+      ctx.translate(cx + side * 6 * U, yy - 8 * U);
+      ctx.scale(side, 1);
+      ctx.rotate(-0.2 + flap * 0.5);
+      ctx.fillStyle = '#8a2f3f';
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
+      ctx.quadraticCurveTo(26 * U, -22 * U, 42 * U, -14 * U);
+      ctx.lineTo(30 * U, -2 * U);
+      ctx.quadraticCurveTo(16 * U, 4 * U, 0, 4 * U);
+      ctx.closePath();
+      ctx.fill();
+      ctx.restore();
+    }
+    ctx.fillStyle = '#b03a4a';
+    ctx.beginPath();
+    ctx.ellipse(cx, yy + 2 * U, 20 * U, 13 * U, 0, 0, 7);
+    ctx.fill();
+    ctx.beginPath(); ctx.arc(cx - 18 * U, yy - 6 * U, 10 * U, 0, 7); ctx.fill();
+    ctx.fillStyle = '#fff';
+    ctx.beginPath(); ctx.arc(cx - 21 * U, yy - 8 * U, 3.5 * U, 0, 7); ctx.fill();
+    ctx.fillStyle = '#222';
+    ctx.beginPath(); ctx.arc(cx - 22 * U, yy - 8 * U, 1.7 * U, 0, 7); ctx.fill();
+    if (Math.random() < 0.12) spawnParticles(cx - 30 * U, yy - 4 * U, 1, '#ff9a4d');
+  } else if (o.type === 'storm') {
+    // ענן סערה: מהבהב אזהרה ואז ברק
+    const yy = o.baseY;
+    const cx = sx + o.w / 2;
+    const phase = o.t % 2.4;
+    const warning = phase > 1.45 && phase <= 1.85;
+    const bolt = phase > 1.85;
+    ctx.fillStyle = warning && Math.floor(o.t * 12) % 2 === 0 ? '#8a8aa0' : '#5a5a70';
+    ctx.beginPath();
+    ctx.arc(cx, yy, 26 * U, 0, 7);
+    ctx.arc(cx - 24 * U, yy + 8 * U, 19 * U, 0, 7);
+    ctx.arc(cx + 24 * U, yy + 8 * U, 20 * U, 0, 7);
+    ctx.fill();
+    if (warning) {
+      ctx.font = Math.round(20 * U) + 'px sans-serif';
+      ctx.fillText('⚡', cx, yy + 4 * U);
+    }
+    if (bolt) {
+      ctx.strokeStyle = '#ffe94d';
+      ctx.lineWidth = 5 * U;
+      ctx.beginPath();
+      let by = yy + 20 * U;
+      ctx.moveTo(cx, by);
+      for (let i = 1; i <= 5; i++) {
+        ctx.lineTo(cx + (i % 2 === 0 ? -1 : 1) * 12 * U, by + i * 29 * U);
+      }
+      ctx.stroke();
+      ctx.strokeStyle = 'rgba(255,255,255,.7)';
+      ctx.lineWidth = 2 * U;
+      ctx.stroke();
+    }
+  } else if (o.type === 'hawk') {
+    // נץ צולל מהיר
+    const yy = o.baseY + Math.sin(o.t * 5) * 12 * U;
+    const cx = sx + o.w / 2;
+    const flap = Math.sin(o.t * 14) * 0.7;
+    ctx.fillStyle = '#6b4a2d';
+    for (const side of [-1, 1]) {
+      ctx.save();
+      ctx.translate(cx + side * 4 * U, yy);
+      ctx.scale(side, 1);
+      ctx.rotate(flap * 0.5);
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
+      ctx.quadraticCurveTo(20 * U, -18 * U, 38 * U, -10 * U);
+      ctx.quadraticCurveTo(20 * U, 0, 0, 5 * U);
+      ctx.closePath();
+      ctx.fill();
+      ctx.restore();
+    }
+    ctx.beginPath();
+    ctx.ellipse(cx, yy, 15 * U, 9 * U, 0, 0, 7);
+    ctx.fill();
+    ctx.fillStyle = '#e8a33d';
+    ctx.beginPath();
+    ctx.moveTo(cx - 15 * U, yy);
+    ctx.lineTo(cx - 24 * U, yy + 3 * U);
+    ctx.lineTo(cx - 15 * U, yy + 5 * U);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = '#fff';
+    ctx.beginPath(); ctx.arc(cx - 9 * U, yy - 3 * U, 3 * U, 0, 7); ctx.fill();
+    ctx.fillStyle = '#222';
+    ctx.beginPath(); ctx.arc(cx - 10 * U, yy - 3 * U, 1.5 * U, 0, 7); ctx.fill();
   }
   ctx.restore();
 }
