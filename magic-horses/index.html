@@ -555,8 +555,12 @@ const snd = {
 let heVoice = null;
 function pickVoice() {
   try {
-    const vs = speechSynthesis.getVoices();
-    heVoice = vs.find(v => v.lang && v.lang.toLowerCase().startsWith('he')) || null;
+    const vs = speechSynthesis.getVoices().filter(v => v.lang && v.lang.toLowerCase().startsWith('he'));
+    // prefer a downloaded high-quality voice over the default robotic one
+    heVoice =
+      vs.find(v => /enhanced|premium|neural|natural/i.test(v.name)) ||
+      vs.find(v => /carmit/i.test(v.name)) ||
+      vs[0] || null;
   } catch (e) {}
 }
 if ('speechSynthesis' in window) {
@@ -570,8 +574,8 @@ function speak(text) {
     const u = new SpeechSynthesisUtterance(text);
     u.lang = 'he-IL';
     if (heVoice) u.voice = heVoice;
-    u.rate = 0.95;
-    u.pitch = 1.05;
+    u.rate = 0.9;
+    u.pitch = 1.12;
     speechSynthesis.speak(u);
   } catch (e) {}
 }
@@ -585,8 +589,8 @@ function speakMore(text) {
     const u = new SpeechSynthesisUtterance(text);
     u.lang = 'he-IL';
     if (heVoice) u.voice = heVoice;
-    u.rate = 0.95;
-    u.pitch = 1.05;
+    u.rate = 0.9;
+    u.pitch = 1.12;
     speechSynthesis.speak(u);
   } catch (e) {}
 }
@@ -595,7 +599,10 @@ function speakSoft(text) {
   try { if ('speechSynthesis' in window && speechSynthesis.speaking) return; } catch (e) {}
   speak(text);
 }
-function riderName() { return rider === 'dad' ? 'אבא' : 'שילה'; }
+/* speech-only names, fully vocalized so the TTS pronounces them right */
+const NAME_SHILO = 'שִׁילֹה';
+const NAME_GABRIEL = 'גַּבְרִיאֵל';
+function riderName() { return rider === 'dad' ? 'אַבָּא' : NAME_SHILO; }
 /* cheering lines — the rider by name, plus baby Gabriel cheering from the side */
 function cheerLine() {
   const n = riderName();
@@ -604,10 +611,10 @@ function cheerLine() {
     'איזה אלוף אתה ' + n + '!',
     'וואו ' + n + ', אתה טס!',
     n + ', הסוס שלך גאה בך!',
-    'גבריאל התינוק מריע לך!',
-    'גבריאל מוחא כפיים!',
-    'תראה לגבריאל איך עפים!',
-    'גבריאל צוחק ואומר: עוד פעם!'
+    NAME_GABRIEL + ' התינוק מריע לך!',
+    NAME_GABRIEL + ' מוחא כפיים!',
+    'תראה ל' + NAME_GABRIEL + ' איך עפים!',
+    NAME_GABRIEL + ' צוחק ואומר: עוד פעם!'
   ];
   return lines[Math.floor(Math.random() * lines.length)];
 }
@@ -641,7 +648,7 @@ function startMusic() {
     if (muted || !audioCtx || (state !== ST.PLAY && state !== ST.COUNT)) return;
     const at = audioCtx.currentTime + 0.08;
     const i = musicStep % LEAD.length;
-    const night = biomeAt(G.dist || 0) % 4 === 3;
+    const night = BIOMES[biomeAt(G.dist || 0) % BIOMES.length].celestial === 'moon';
     const deg = LEAD[i] + (night ? -2 : 0); // darker flavor at night
     playTone(degFreq(deg, 1), at, stepDur * 0.85, 'triangle', 0.028);
     if (i % 4 === 0) playTone(degFreq(BASS[Math.floor(musicStep / 4) % BASS.length], 0), at, stepDur * 3.4, 'sine', 0.04);
@@ -859,8 +866,33 @@ const BIOMES = [
     sky: ['#070720', '#1a1a4a', '#3a3a7a'],
     hill: '#141435', ground: ['#2a6a6a', '#0f3535'], path: '#3a5a6a',
     deco: 'night', celestial: 'moon'
+  },
+  {
+    name: 'ממלכת הממתקים', emoji: '🍬',
+    sky: ['#ff8ac8', '#ffc0e0', '#fff0d0'],
+    hill: '#e87ab8', ground: ['#b06a3a', '#6b3a1f'], path: '#ffb8d8',
+    deco: 'candy', celestial: 'sun'
+  },
+  {
+    name: 'העולם התת ימי', emoji: '🌊',
+    sky: ['#0a3a6b', '#1a6a9a', '#7ac8e8'],
+    hill: '#0f4a6b', ground: ['#e8d8a0', '#b8a060'], path: '#d8c890',
+    deco: 'sea', celestial: 'sun'
+  },
+  {
+    name: 'ארץ השלג', emoji: '❄️',
+    sky: ['#8ab8e8', '#c8e0f5', '#ffffff'],
+    hill: '#a8c8e0', ground: ['#f8fbff', '#c8d8e8'], path: '#e0e8f0',
+    deco: 'snow', celestial: 'sun'
+  },
+  {
+    name: 'החלל', emoji: '🚀',
+    sky: ['#050514', '#141433', '#2a2a5a'],
+    hill: '#1a1a3a', ground: ['#8a8aa8', '#4a4a6a'], path: '#6a6a8a',
+    deco: 'space', celestial: 'moon'
   }
 ];
+const SPACE_BIOME = 7; // low gravity there — moon jumps
 function biomeAt(dist) {
   if (G && G.fixedBiome != null) return G.fixedBiome; // level mode: one world per level
   return Math.floor(dist / BIOME_LEN) % BIOMES.length;
@@ -875,13 +907,22 @@ function levelCfg(lvl) {
     { type: 'lava',  target: 2 + Math.ceil(lvl / 2), label: n => 'לעבור ' + n + ' בריכות לבה 🔥', say: n => 'לעבור ' + n + ' בריכות לבה בלי ליפול' },
     { type: 'fly',   target: 4 + lvl, label: n => 'לעוף ' + n + ' שניות 🪽', say: n => 'לעוף ' + n + ' שניות עם הכנפיים' }
   ];
+  // surprise twist from level 4 up
+  const twists = ['none', 'turbo', 'lowgrav', 'rich'];
+  const twist = lvl < 4 ? 'none' : twists[lvl % twists.length];
   return {
     len: Math.min(300 + lvl * 60, 900),
     biome: biome,
     mission: missions[(lvl - 1) % missions.length],
-    baseSpeed: Math.min(225 + lvl * 6, 320)
+    baseSpeed: Math.min(225 + lvl * 6, 320) + (twist === 'turbo' ? 30 : 0),
+    twist: twist
   };
 }
+const TWIST_TEXT = {
+  turbo:   { say: 'הפתעה! שלב טורבו סופר מהיר!', show: '⚡ שלב טורבו!' },
+  lowgrav: { say: 'הפתעה! קפיצות ירח גבוהות!', show: '🌙 קפיצות ירח!' },
+  rich:    { say: 'הפתעה! מלא מתנות קסם בדרך!', show: '🎁 מלא מתנות!' }
+};
 function refreshLevelChip() {
   $('levelChip').textContent = '🎮 שלב ' + curLevel + ' · ' + BIOMES[(curLevel - 1) % BIOMES.length].emoji;
 }
@@ -921,12 +962,20 @@ function resetGame() {
     G.levelLen = cfg.len;
     G.baseSpeed = cfg.baseSpeed;
     G.levelMission = cfg.mission;
+    G.twist = cfg.twist;
   } else {
     G.fixedBiome = null;
     G.levelLen = 0;
     G.baseSpeed = 240;
     G.levelMission = null;
+    G.twist = 'none';
   }
+  G.petAt = 0.42 + Math.random() * 0.25;
+  G.pet = null;
+  G.petUsed = false;
+  G.petZapT = 0;
+  G.balloons = [];
+  G.gifts = [];
   G.levelDone = false;
   G.lvlBonusDone = false;
   G.lvlGoldDone = false;
@@ -1106,8 +1155,8 @@ function finishDuelRound(score) {
     $('duelFaceDad').classList.toggle('winner', d >= s);
     $('duelEndTitle').textContent = s === d ? 'תיקו! 🤝' : (s > d ? 'שילה ניצח! 🎉' : 'אבא ניצח! 🎉');
     $('duelEndScore').innerHTML = 'שילה: <b>' + s + '</b> · אבא: <b>' + d + '</b>';
-    speak(s === d ? 'תיקו! שניכם אלופים! גבריאל מוחא כפיים לשניכם!'
-      : (s > d ? 'שילה ניצח! גבריאל מריע לשילה!' : 'אבא ניצח! אבל שילה היה מדהים!'));
+    speak(s === d ? 'תיקו! שניכם אלופים! ' + NAME_GABRIEL + ' מוחא כפיים לשניכם!'
+      : (s > d ? NAME_SHILO + ' ניצח! ' + NAME_GABRIEL + ' מריע ל' + NAME_SHILO + '!' : 'אַבָּא ניצח! אבל ' + NAME_SHILO + ' היה מדהים!'));
     spawnConfetti(80, W / 2, H * 0.3);
     setTimeout(() => show('duelEnd'), 700);
   }
@@ -1133,10 +1182,14 @@ function startCountdown(resume) {
     const b = BIOMES[G.fixedBiome % BIOMES.length];
     const q = currentQuest();
     speak('קדימה ' + riderName() + '! שלב ' + curLevel + '. ' + b.name + '. המשימה: ' + (q.say ? q.say(q.target) : q.label(q.target)));
+    if (G.twist !== 'none' && TWIST_TEXT[G.twist]) {
+      speakMore(TWIST_TEXT[G.twist].say);
+      announce(TWIST_TEXT[G.twist].show, '#ffd94d', 36);
+    }
     announceBiome(G.fixedBiome);
   }
   if (!resume && G.mode === 'duel') {
-    speak(rider === 'shila' ? 'הקרב הגדול! שילה מתחיל! גבריאל צופה מהצד!' : 'עכשיו תור אבא! בהצלחה!');
+    speak(rider === 'shila' ? 'הקרב הגדול! ' + NAME_SHILO + ' מתחיל! ' + NAME_GABRIEL + ' צופה מהצד!' : 'עכשיו תור אַבָּא! בהצלחה!');
   }
   showNum(n);
   beep(440, 440, 0.15, 'sine', 0.1);
@@ -1208,11 +1261,15 @@ function horseSize() { return 76 * U; }
 
 /* ---------- spawning ---------- */
 function biomeChoices(bi) {
-  switch (bi % 4) {
+  switch (bi % BIOMES.length) {
     case 0: return ['stars', 'lava', 'catlion', 'stars', 'birdfly'];
     case 1: return ['lava', 'lava', 'catlion', 'stars', 'fishbun'];
     case 2: return ['birdfly', 'stars', 'stars', 'lava', 'dogbee'];
-    default: return ['fishbun', 'catlion', 'stars', 'lava', 'dogbee'];
+    case 3: return ['fishbun', 'catlion', 'stars', 'lava', 'dogbee'];
+    case 4: return ['gummy', 'stars', 'lava', 'stars', 'birdfly'];
+    case 5: return ['octocat', 'stars', 'lava', 'fishbun', 'stars'];
+    case 6: return ['penguin', 'stars', 'lava', 'catlion', 'stars'];
+    default: return ['aliendog', 'stars', 'lava', 'gummy', 'stars'];
   }
 }
 function spawnWave() {
@@ -1246,13 +1303,26 @@ function spawnWave() {
     // always low — the rule stays simple for a kid: dogbee = jump over it
     G.obstacles.push({ type: 'dogbee', x: sx, w: 64 * U, baseY: groundY() - rand(48, 70) * U, t: rand(0, 6), hit: false });
     width = 64 * U;
+  } else if (pick === 'gummy') {
+    G.obstacles.push({ type: 'gummy', x: sx, w: 60 * U, t: rand(0, 6), hit: false });
+    width = 60 * U;
+  } else if (pick === 'octocat') {
+    G.obstacles.push({ type: 'octocat', x: sx, w: 62 * U, baseY: groundY() - rand(110, 190) * U, t: rand(0, 6), hit: false });
+    width = 62 * U;
+    addStarArc(sx, groundY() - 40 * U, 2);
+  } else if (pick === 'penguin') {
+    G.obstacles.push({ type: 'penguin', x: sx, w: 60 * U, baseY: groundY() - rand(100, 180) * U, t: rand(0, 6), hit: false });
+    width = 60 * U;
+  } else if (pick === 'aliendog') {
+    G.obstacles.push({ type: 'aliendog', x: sx, w: 64 * U, baseY: groundY() - rand(50, 80) * U, t: rand(0, 6), hit: false });
+    width = 64 * U;
   } else {
     addStarArc(sx, groundY() - rand(60, 190) * U, 4);
     width = 150 * U;
   }
 
-  // power-up every ~200-300m of travel
-  G.sincePower += 1;
+  // power-up every ~200-300m of travel (the 'rich' twist doubles the pace)
+  G.sincePower += G.twist === 'rich' ? 2 : 1;
   if (d > 100 && G.sincePower > rand(5, 8)) {
     G.sincePower = 0;
     const opts = ['boost', 'shield'];
@@ -1356,7 +1426,7 @@ function endGame() {
     $('overTitle').textContent = 'לא נורא!';
     $('overScore').innerHTML = 'שלב ' + curLevel + ' עוד מחכה לך<br>⭐ ' + G.stars + ' כוכבים בכל זאת נכנסו לארנק!';
     $('overBest').textContent = 'מנסים עוד פעם? 💪';
-    speak('לא נורא ' + riderName() + '! מנסים עוד פעם! גבריאל מאמין בך!');
+    speak('לא נורא ' + riderName() + '! מנסים עוד פעם! ' + NAME_GABRIEL + ' מאמין בך!');
     setTimeout(() => show('overScr'), 700);
     return;
   }
@@ -1405,18 +1475,25 @@ function levelComplete() {
     setTimeout(() => { if (i < rating) { el.classList.add('on'); beep(660 + i * 160, 660 + i * 160, 0.2, 'sine', 0.1); } }, 500 + i * 480);
   });
   speak('איזה אלוף אתה ' + riderName() + '! סיימת את שלב ' + lvl + '! קיבלת ' + rating + ' כוכבי זהב!');
-  if (Math.random() < 0.55) speakMore('וגם גבריאל התינוק מוחא לך כפיים!');
+  if (Math.random() < 0.55) speakMore('וגם ' + NAME_GABRIEL + ' התינוק מוחא לך כפיים!');
   setTimeout(() => show('levelScr'), 600);
 }
 
 /* ---------- bonus stage ---------- */
 let bonusFlip = 0;
+const BONUS_TYPES = [
+  { type: 'starRain',   show: '🎁 בונוס! גשם כוכבים!',  say: 'בונוס! גשם כוכבים! תאסוף כמה שיותר!' },
+  { type: 'ringTunnel', show: '🎁 בונוס! מנהרת הקשת!',  say: 'בונוס! תעוף דרך הטבעות של הקשת!' },
+  { type: 'balloons',   show: '🎈 בונוס! פוצצו בלונים!', say: 'בונוס! תפוצץ את הבלונים!' },
+  { type: 'gifts',      show: '🎁 בונוס! מטר מתנות!',   say: 'בונוס! מתנות נופלות מהשמיים!' }
+];
 function startBonus() {
   if (state !== ST.PLAY) return;
-  const type = (bonusFlip++ % 2 === 0) ? 'starRain' : 'ringTunnel';
+  const bt = BONUS_TYPES[bonusFlip++ % BONUS_TYPES.length];
+  const type = bt.type;
   G.bonusStage = { type: type, t: 0, dur: 8.5, startStars: G.stars };
-  announce(type === 'starRain' ? '🎁 בונוס! גשם כוכבים!' : '🎁 בונוס! מנהרת הקשת!', '#ffd94d', 40);
-  speak(type === 'starRain' ? 'בונוס! גשם כוכבים! תאסוף כמה שיותר!' : 'בונוס! תעוף דרך הטבעות של הקשת!');
+  announce(bt.show, '#ffd94d', 40);
+  speak(bt.say);
   snd.quest();
   // clear the road: no hazards during the bonus
   G.obstacles = G.obstacles.filter(o => o.x + o.w - G.x < horseX());
@@ -1500,6 +1577,18 @@ function update(dt) {
       if (Math.random() < dt * 6) {
         G.starsArr.push({ x: G.x + rand(W * 0.3, W + 60), y: -20 * U, t: rand(0, 6), got: false, fall: rand(70, 130) * U });
       }
+    } else if (b.type === 'balloons') {
+      if (Math.random() < dt * 3.2) {
+        G.balloons.push({
+          x: G.x + W + 40 * U, y: groundY() - rand(30, 190) * U,
+          vy: -rand(14, 26) * U, t: rand(0, 6), got: false,
+          color: CONF_COLORS[Math.floor(rand(0, CONF_COLORS.length))]
+        });
+      }
+    } else if (b.type === 'gifts') {
+      if (Math.random() < dt * 3.4) {
+        G.gifts.push({ x: G.x + rand(W * 0.3, W + 60), y: -20 * U, t: rand(0, 6), got: false, fall: rand(60, 110) * U });
+      }
     } else if (!b.ringsSpawned) {
       b.ringsSpawned = true;
       for (let i = 0; i < 6; i++) {
@@ -1562,7 +1651,9 @@ function update(dt) {
     questProgress('dist', (G.dist - G.qStartDist) - G.qProg);
   }
 
-  // vertical physics
+  // vertical physics — moon-jump gravity in space or on the lowgrav twist
+  G.lowGrav = biomeAt(G.dist) === SPACE_BIOME || G.twist === 'lowgrav';
+  const gravMul = G.lowGrav ? 0.52 : 1;
   const gy = groundY();
   if (G.holding) G.holdTime += dt;
   const wantFly = G.holding && (G.holdTime > 0.18 || !G.onGround);
@@ -1575,7 +1666,7 @@ function update(dt) {
     questProgress('fly', dt);
     if (Math.random() < dt * 10) spawnParticles(horseX() - 46 * U, gy - G.y - 30 * U, 1, '#ffe9a8');
   } else {
-    G.vy -= 1600 * U * dt;
+    G.vy -= 1600 * gravMul * U * dt;
     G.wingT += dt * 4;
   }
   G.vy = clamp(G.vy, -820 * U, 900 * U);
@@ -1636,13 +1727,13 @@ function update(dt) {
       if (o.hit) continue;
       let oy1, oy2;
       const bodyH = 52 * U;
-      if (o.type === 'birdfly') {
+      if (o.type === 'birdfly' || o.type === 'octocat' || o.type === 'penguin') {
         const yy = o.baseY + Math.sin(o.t * 2.2) * 26 * U;
         oy1 = yy - bodyH / 2; oy2 = yy + bodyH / 2;
-      } else if (o.type === 'dogbee') {
+      } else if (o.type === 'dogbee' || o.type === 'aliendog') {
         const yy = o.baseY + Math.sin(o.t * 3.1) * 10 * U;
         oy1 = yy - bodyH / 2; oy2 = yy + bodyH / 2;
-      } else if (o.type === 'fishbun') {
+      } else if (o.type === 'fishbun' || o.type === 'gummy') {
         const hop = Math.abs(Math.sin(o.t * 3)) * 46 * U;
         oy1 = gy - hop - bodyH; oy2 = gy - hop;
       } else {
@@ -1684,6 +1775,79 @@ function update(dt) {
       floaty('+⭐', sx, sy - 22 * U, '#ffd94d', 22);
       updateHUD();
     }
+  }
+
+  // balloons (bonus) — touch to pop
+  G.balloons = G.balloons.filter(bl => bl.x - G.x > -80 * U && bl.y > -60 * U && !bl.done);
+  for (const bl of G.balloons) {
+    if (bl.got) continue;
+    bl.t += dt;
+    bl.y += bl.vy * dt;
+    const sx = bl.x - G.x;
+    if (sx > hbx1 - 22 * U && sx < hbx2 + 22 * U && bl.y > hby1 - 24 * U && bl.y < hby2 + 24 * U) {
+      bl.got = true; bl.done = true;
+      G.stars += 2;
+      questProgress('stars', 2);
+      snd.pop();
+      spawnConfetti(10, sx, bl.y);
+      floaty('פּוֹפּ! +2 ⭐', sx, bl.y - 24 * U, bl.color, 24);
+      updateHUD();
+    }
+  }
+  // gifts (bonus) — random goodies
+  G.gifts = G.gifts.filter(gf => gf.x - G.x > -80 * U && !gf.done);
+  for (const gf of G.gifts) {
+    if (gf.got) continue;
+    gf.t += dt;
+    if (gf.fall) {
+      gf.y += gf.fall * dt;
+      if (gf.y > groundY() - 34 * U) { gf.y = groundY() - 34 * U; gf.fall = 0; }
+    }
+    const sx = gf.x - G.x;
+    if (sx > hbx1 - 20 * U && sx < hbx2 + 20 * U && gf.y > hby1 - 22 * U && gf.y < hby2 + 22 * U) {
+      gf.got = true; gf.done = true;
+      const roll = Math.random();
+      if (roll < 0.2 && G.hearts < 3) {
+        G.hearts++;
+        floaty('❤️ +1', sx, gf.y - 24 * U, '#ff8f8f', 26);
+      } else if (roll < 0.4) {
+        G.shield = true;
+        floaty('🫧 מגן!', sx, gf.y - 24 * U, '#a8e6ff', 26);
+      } else {
+        G.stars += 3;
+        questProgress('stars', 3);
+        floaty('+3 ⭐', sx, gf.y - 24 * U, '#ffd94d', 26);
+      }
+      snd.power();
+      spawnParticles(sx, gf.y, 10, '#ffd94d');
+      updateHUD();
+    }
+  }
+
+  // dragon helper — from level 3, once per level
+  if (G.mode === 'level' && curLevel >= 3 && !G.petUsed && !G.bonusStage && G.dist / G.levelLen > G.petAt) {
+    G.petUsed = true;
+    G.pet = { t: 0, dur: 6 };
+    announce('🐲 דרקוני בא לעזור!', '#7bf07b', 36);
+    speak('דרקוני הקטן בא לעזור לך ' + riderName() + '!');
+    snd.power();
+  }
+  if (G.pet) {
+    G.pet.t += dt;
+    G.petZapT -= dt;
+    if (G.petZapT <= 0) {
+      G.petZapT = 1.7;
+      const target = G.obstacles.find(o => o.type !== 'lava' && !o.hit && o.x - G.x > hbx2 && o.x - G.x < W);
+      if (target) {
+        target.hit = true;
+        const tx = target.x - G.x + target.w / 2;
+        const ty = (target.baseY !== undefined ? target.baseY : gy - 30 * U);
+        snd.pop();
+        spawnParticles(tx, ty, 14, '#9aff8f');
+        floaty('זאפ! ⚡', tx, ty - 30 * U, '#9aff8f', 26);
+      }
+    }
+    if (G.pet.t >= G.pet.dur) G.pet = null;
   }
 
   // rainbow rings
@@ -1762,13 +1926,13 @@ function update(dt) {
 }
 
 function spawnAmbient(dt) {
-  const b = biomeAt(G.dist);
+  const b = biomeAt(G.dist) % BIOMES.length;
   const gy = groundY();
-  let rate, kind;
-  if (b === 0) { rate = 1.6; kind = 'petal'; }
-  else if (b === 1) { rate = 3.2; kind = 'ember'; }
-  else if (b === 2) { rate = 1.2; kind = 'puff'; }
-  else { rate = 2.4; kind = 'firefly'; }
+  const conf = [
+    { rate: 1.6, kind: 'petal' }, { rate: 3.2, kind: 'ember' }, { rate: 1.2, kind: 'puff' }, { rate: 2.4, kind: 'firefly' },
+    { rate: 1.8, kind: 'petal' }, { rate: 2.8, kind: 'bubble' }, { rate: 3.2, kind: 'flake' }, { rate: 2.2, kind: 'firefly' }
+  ][b] || { rate: 1.6, kind: 'petal' };
+  const rate = conf.rate, kind = conf.kind;
   if (Math.random() < dt * rate) {
     if (kind === 'ember') {
       G.ambient.push({ kind, x: rand(0, W), y: gy + 10 * U, vx: rand(-20, 20) * U, vy: rand(-90, -40) * U, life: rand(1.5, 3), t: 0, r: rand(1.5, 3.5) * U });
@@ -1779,6 +1943,10 @@ function spawnAmbient(dt) {
       }
     } else if (kind === 'puff') {
       G.ambient.push({ kind, x: W + 20, y: rand(H * 0.1, gy - 60 * U), vx: rand(-60, -30) * U, vy: 0, life: 6, t: 0, r: rand(6, 14) * U });
+    } else if (kind === 'bubble') {
+      G.ambient.push({ kind, x: rand(0, W), y: gy + 10 * U, vx: rand(-15, 15) * U, vy: rand(-80, -40) * U, life: rand(2, 4), t: 0, r: rand(3, 7) * U });
+    } else if (kind === 'flake') {
+      G.ambient.push({ kind, x: rand(0, W + 60), y: -10, vx: rand(-40, -10) * U, vy: rand(30, 60) * U, life: rand(4, 7), t: 0, r: rand(2, 4.5) * U });
     } else {
       G.ambient.push({ kind, x: rand(0, W + 60), y: -10, vx: rand(-50, -15) * U, vy: rand(25, 55) * U, life: rand(3, 6), t: 0, r: rand(2.5, 4.5) * U });
     }
@@ -1803,9 +1971,11 @@ function draw() {
   for (const o of G.obstacles) drawObstacle(o);
   drawStarsArr();
   drawRings();
+  drawBalloonsGifts();
   drawPickups();
   drawGold();
   drawHorse();
+  drawPet();
   drawParticles();
   drawForeground();
   drawAmbientFront();
@@ -1944,7 +2114,11 @@ function drawDeco(deco, scroll, gy, alpha) {
     if (deco === 'forest') drawMagicTree(x, gy, seed);
     else if (deco === 'volcano') drawVolcanoRock(x, gy, seed);
     else if (deco === 'clouds') drawCloudPuff(x, gy, seed);
-    else drawGlowShroom(x, gy, seed);
+    else if (deco === 'night') drawGlowShroom(x, gy, seed);
+    else if (deco === 'candy') drawLollipop(x, gy, seed);
+    else if (deco === 'sea') drawSeaweed(x, gy, seed);
+    else if (deco === 'snow') drawSnowPine(x, gy, seed);
+    else drawSpaceRock(x, gy, seed);
   }
   ctx.globalAlpha = 1;
 }
@@ -2008,6 +2182,101 @@ function drawGlowShroom(x, gy, seed) {
   ctx.fill();
 }
 
+function drawLollipop(x, gy, seed) {
+  const th = (75 + seed * 12) * U;
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(x - 4 * U, gy - th * 0.55, 8 * U, th * 0.55);
+  const cols = [['#ff5f8f', '#fff'], ['#7bd8f0', '#fff'], ['#ffd94d', '#ff8f5f'], ['#b18cff', '#fff']];
+  const c = cols[seed % cols.length];
+  ctx.fillStyle = c[0];
+  ctx.beginPath(); ctx.arc(x, gy - th * 0.55 - th * 0.22, th * 0.26, 0, 7); ctx.fill();
+  ctx.strokeStyle = c[1];
+  ctx.lineWidth = 4 * U;
+  ctx.beginPath();
+  for (let a = 0; a < 12; a += 0.35) {
+    const rr = a / 12 * th * 0.22;
+    const px = x + Math.cos(a + seed) * rr, py = gy - th * 0.55 - th * 0.22 + Math.sin(a + seed) * rr;
+    a === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py);
+  }
+  ctx.stroke();
+  // gumdrop at the base
+  ctx.fillStyle = ['#7bf07b', '#ff8fc0', '#ffd94d'][seed % 3];
+  ctx.beginPath(); ctx.ellipse(x + th * 0.3, gy - 8 * U, 11 * U, 9 * U, 0, Math.PI, 0); ctx.fill();
+}
+function drawSeaweed(x, gy, seed) {
+  const th = (70 + seed * 12) * U;
+  ctx.strokeStyle = '#2fa86a';
+  ctx.lineWidth = 6 * U;
+  ctx.lineCap = 'round';
+  for (let i = -1; i <= 1; i++) {
+    const sway = Math.sin((G.t || 0) * 1.5 + seed + i) * 10 * U;
+    ctx.beginPath();
+    ctx.moveTo(x + i * 10 * U, gy);
+    ctx.quadraticCurveTo(x + i * 16 * U - sway, gy - th * 0.5, x + i * 12 * U + sway, gy - th * (0.7 + i * 0.1));
+    ctx.stroke();
+  }
+  // coral
+  ctx.fillStyle = '#ff8fa8';
+  for (let i = 0; i < 4; i++) {
+    ctx.beginPath();
+    ctx.arc(x + (i - 1.5) * 8 * U, gy - 6 * U - (i % 2) * 8 * U, 6 * U, 0, 7);
+    ctx.fill();
+  }
+}
+function drawSnowPine(x, gy, seed) {
+  const th = (85 + seed * 13) * U;
+  ctx.fillStyle = '#7b4a2d';
+  ctx.fillRect(x - 5 * U, gy - th * 0.25, 10 * U, th * 0.25);
+  for (let i = 0; i < 3; i++) {
+    const w = th * (0.34 - i * 0.08), yy = gy - th * (0.25 + i * 0.25);
+    ctx.fillStyle = '#2a7a4a';
+    ctx.beginPath();
+    ctx.moveTo(x - w, yy);
+    ctx.lineTo(x, yy - th * 0.3);
+    ctx.lineTo(x + w, yy);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = 'rgba(255,255,255,.85)';
+    ctx.beginPath();
+    ctx.moveTo(x - w * 0.6, yy - th * 0.09);
+    ctx.lineTo(x, yy - th * 0.3);
+    ctx.lineTo(x + w * 0.6, yy - th * 0.09);
+    ctx.closePath();
+    ctx.fill();
+  }
+  if (seed % 4 === 0) { // snowman friend
+    const sx2 = x + th * 0.45;
+    ctx.fillStyle = '#fff';
+    ctx.beginPath(); ctx.arc(sx2, gy - 12 * U, 12 * U, 0, 7); ctx.fill();
+    ctx.beginPath(); ctx.arc(sx2, gy - 30 * U, 8 * U, 0, 7); ctx.fill();
+    ctx.fillStyle = '#333';
+    ctx.beginPath(); ctx.arc(sx2 - 2.5 * U, gy - 32 * U, 1.2 * U, 0, 7); ctx.fill();
+    ctx.beginPath(); ctx.arc(sx2 + 2.5 * U, gy - 32 * U, 1.2 * U, 0, 7); ctx.fill();
+    ctx.fillStyle = '#ff8f3d';
+    ctx.beginPath();
+    ctx.moveTo(sx2, gy - 30 * U); ctx.lineTo(sx2 + 7 * U, gy - 29 * U); ctx.lineTo(sx2, gy - 28 * U);
+    ctx.closePath(); ctx.fill();
+  }
+}
+function drawSpaceRock(x, gy, seed) {
+  // grey moon rock
+  ctx.fillStyle = '#5a5a78';
+  ctx.beginPath();
+  ctx.ellipse(x, gy - 12 * U, (22 + seed * 3) * U, (14 + seed * 2) * U, 0, Math.PI, 0);
+  ctx.fill();
+  ctx.fillStyle = '#454560';
+  ctx.beginPath(); ctx.arc(x - 6 * U, gy - 18 * U, 4 * U, 0, 7); ctx.fill();
+  // floating planet with a ring
+  const py = gy - (120 + seed * 22) * U;
+  const cols = ['#ff8f5f', '#7bd8f0', '#c98fff', '#ffd94d'];
+  ctx.fillStyle = cols[seed % cols.length];
+  ctx.beginPath(); ctx.arc(x, py, (12 + seed * 2) * U, 0, 7); ctx.fill();
+  ctx.strokeStyle = 'rgba(255,255,255,.6)';
+  ctx.lineWidth = 2.5 * U;
+  ctx.beginPath();
+  ctx.ellipse(x, py, (20 + seed * 2) * U, 6 * U, -0.3, 0, 7);
+  ctx.stroke();
+}
 function drawGroundDetail() {
   const gy = groundY();
   ctx.fillStyle = G._pathColor || '#d9b98a';
@@ -2139,9 +2408,9 @@ function drawRings() {
 function drawForeground() {
   const gy = groundY();
   const d = state === ST.HOME ? 0 : G.dist;
-  const bi = biomeAt(d) % 4;
-  const cols = ['#1f5a2a', '#241418', '#e8e0f5', '#0a2828'];
-  ctx.fillStyle = cols[bi];
+  const bi = biomeAt(d) % BIOMES.length;
+  const cols = ['#1f5a2a', '#241418', '#e8e0f5', '#0a2828', '#c2487a', '#0a3550', '#dce8f5', '#232345'];
+  ctx.fillStyle = cols[bi] || cols[0];
   ctx.globalAlpha = 0.9;
   const spacing = 150 * U;
   const off = G.x * 1.25;
@@ -2305,6 +2574,68 @@ function drawObstacle(o) {
     // dog face
     ctx.font = Math.round(24 * U) + 'px sans-serif';
     ctx.fillText('🐶', cx - 14 * U, yy - 2 * U);
+  } else if (o.type === 'gummy') {
+    // דוב-גומי: squishy jelly blob with a bear face
+    const hop = Math.abs(Math.sin(o.t * 3)) * 46 * U;
+    const squish = 1 - Math.abs(Math.cos(o.t * 3)) * 0.25;
+    const cx = sx + o.w / 2, cy = gy - 24 * U - hop;
+    const gg = ctx.createLinearGradient(cx, cy - 24 * U, cx, cy + 20 * U);
+    gg.addColorStop(0, 'rgba(255,80,120,.85)');
+    gg.addColorStop(1, 'rgba(255,140,60,.9)');
+    ctx.fillStyle = gg;
+    ctx.beginPath();
+    ctx.ellipse(cx, cy + 6 * U, 24 * U / squish, 22 * U * squish, 0, 0, 7);
+    ctx.fill();
+    ctx.fillStyle = 'rgba(255,255,255,.45)';
+    ctx.beginPath();
+    ctx.ellipse(cx - 8 * U, cy - 4 * U, 7 * U, 4 * U, -0.5, 0, 7);
+    ctx.fill();
+    ctx.font = Math.round(22 * U) + 'px sans-serif';
+    ctx.fillText('🐻', cx, cy - 2 * U);
+  } else if (o.type === 'octocat') {
+    // תמנון-חתול: floats with waving legs
+    const yy = o.baseY + Math.sin(o.t * 2.2) * 26 * U;
+    const cx = sx + o.w / 2;
+    ctx.strokeStyle = '#c86ad8';
+    ctx.lineWidth = 5 * U;
+    ctx.lineCap = 'round';
+    for (let i = 0; i < 5; i++) {
+      const a = (i - 2) * 0.4;
+      const wig = Math.sin(o.t * 5 + i) * 8 * U;
+      ctx.beginPath();
+      ctx.moveTo(cx + a * 14 * U, yy + 10 * U);
+      ctx.quadraticCurveTo(cx + a * 22 * U + wig, yy + 26 * U, cx + a * 26 * U - wig, yy + 38 * U);
+      ctx.stroke();
+    }
+    ctx.fillStyle = '#d88ae8';
+    ctx.beginPath(); ctx.arc(cx, yy, 20 * U, 0, 7); ctx.fill();
+    ctx.font = Math.round(24 * U) + 'px sans-serif';
+    ctx.fillText('🐱', cx, yy - 2 * U);
+  } else if (o.type === 'penguin') {
+    // פינגווין-פרפר: penguin with butterfly wings
+    const yy = o.baseY + Math.sin(o.t * 2.2) * 26 * U;
+    const cx = sx + o.w / 2;
+    const flap = Math.sin(o.t * 10);
+    ctx.font = Math.round(30 * U) + 'px sans-serif';
+    ctx.save();
+    ctx.translate(cx, yy);
+    ctx.scale(1, 0.7 + flap * 0.3);
+    ctx.fillText('🦋', 0, -4 * U);
+    ctx.restore();
+    ctx.font = Math.round(26 * U) + 'px sans-serif';
+    ctx.fillText('🐧', cx, yy + 6 * U);
+  } else if (o.type === 'aliendog') {
+    // כלב-חייזר: hovers low in a little UFO glow
+    const yy = o.baseY + Math.sin(o.t * 3.1) * 10 * U;
+    const cx = sx + o.w / 2;
+    ctx.fillStyle = 'rgba(120,255,160,.25)';
+    ctx.beginPath(); ctx.ellipse(cx, yy + 14 * U, 26 * U, 10 * U, 0, 0, 7); ctx.fill();
+    ctx.fillStyle = '#9ad8ff';
+    ctx.beginPath(); ctx.ellipse(cx, yy + 12 * U, 22 * U, 8 * U, 0, 0, 7); ctx.fill();
+    ctx.font = Math.round(22 * U) + 'px sans-serif';
+    ctx.fillText('🐶', cx, yy - 2 * U);
+    ctx.font = Math.round(15 * U) + 'px sans-serif';
+    ctx.fillText('👽', cx + 14 * U, yy - 14 * U);
   }
   ctx.restore();
 }
@@ -2347,6 +2678,17 @@ function drawAmbientFront() {
       ctx.beginPath(); ctx.arc(a.x, a.y, a.r, 0, 7); ctx.fill();
     } else if (a.kind === 'puff') {
       ctx.globalAlpha = (1 - k) * 0.5;
+      ctx.fillStyle = '#fff';
+      ctx.beginPath(); ctx.arc(a.x, a.y, a.r, 0, 7); ctx.fill();
+    } else if (a.kind === 'bubble') {
+      ctx.globalAlpha = (1 - k) * 0.6;
+      ctx.strokeStyle = 'rgba(255,255,255,.8)';
+      ctx.lineWidth = 1.5 * U;
+      ctx.beginPath(); ctx.arc(a.x, a.y, a.r, 0, 7); ctx.stroke();
+      ctx.fillStyle = 'rgba(255,255,255,.5)';
+      ctx.beginPath(); ctx.arc(a.x - a.r * 0.3, a.y - a.r * 0.3, a.r * 0.25, 0, 7); ctx.fill();
+    } else if (a.kind === 'flake') {
+      ctx.globalAlpha = (1 - k) * 0.9;
       ctx.fillStyle = '#fff';
       ctx.beginPath(); ctx.arc(a.x, a.y, a.r, 0, 7); ctx.fill();
     } else { // petal
@@ -2445,6 +2787,72 @@ function drawLevelProgress() {
   ctx.beginPath(); ctx.arc(bx2 + bw2 * k, by2 + 3 * U, 7 * U, 0, 7); ctx.fill();
   ctx.font = Math.round(11 * U) + 'px sans-serif';
   ctx.fillText('🐴', bx2 + bw2 * k, by2 + 4 * U);
+}
+
+/* ---------- balloons + gifts (bonus toys) ---------- */
+function drawBalloonsGifts() {
+  for (const bl of G.balloons) {
+    if (bl.got) continue;
+    const sx = bl.x - G.x;
+    if (sx < -50 || sx > W + 60) continue;
+    const sway = Math.sin(bl.t * 3) * 5 * U;
+    ctx.strokeStyle = 'rgba(255,255,255,.6)';
+    ctx.lineWidth = 1.5 * U;
+    ctx.beginPath();
+    ctx.moveTo(sx + sway, bl.y + 18 * U);
+    ctx.quadraticCurveTo(sx, bl.y + 32 * U, sx - sway, bl.y + 44 * U);
+    ctx.stroke();
+    ctx.fillStyle = bl.color;
+    ctx.beginPath();
+    ctx.ellipse(sx + sway, bl.y, 15 * U, 18 * U, 0, 0, 7);
+    ctx.fill();
+    ctx.fillStyle = 'rgba(255,255,255,.5)';
+    ctx.beginPath();
+    ctx.ellipse(sx + sway - 5 * U, bl.y - 6 * U, 4.5 * U, 6 * U, -0.4, 0, 7);
+    ctx.fill();
+  }
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  for (const gf of G.gifts) {
+    if (gf.got) continue;
+    const sx = gf.x - G.x;
+    if (sx < -50 || sx > W + 60) continue;
+    ctx.fillStyle = 'rgba(255,217,77,.2)';
+    ctx.beginPath(); ctx.arc(sx, gf.y, 20 * U, 0, 7); ctx.fill();
+    ctx.font = Math.round(26 * U) + 'px sans-serif';
+    ctx.save();
+    ctx.translate(sx, gf.y);
+    ctx.rotate(Math.sin(gf.t * 4) * 0.2);
+    ctx.fillText('🎁', 0, 0);
+    ctx.restore();
+  }
+}
+
+/* ---------- dragon helper ---------- */
+function drawPet() {
+  if (!G.pet) return;
+  const t = G.pet.t;
+  const fadeIn = Math.min(1, t * 2);
+  const fadeOut = Math.min(1, (G.pet.dur - t) * 2);
+  const px = horseX() - 95 * U + Math.sin(t * 2) * 10 * U;
+  const py = groundY() - G.y - 105 * U + Math.sin(t * 3.2) * 12 * U;
+  ctx.save();
+  ctx.globalAlpha = Math.max(0, Math.min(fadeIn, fadeOut));
+  // little wings
+  const flap = Math.sin(t * 14) * 0.5;
+  ctx.fillStyle = 'rgba(150,255,170,.8)';
+  ctx.save();
+  ctx.translate(px, py - 8 * U);
+  ctx.rotate(-0.4 + flap);
+  ctx.beginPath(); ctx.ellipse(0, -8 * U, 7 * U, 13 * U, 0, 0, 7); ctx.fill();
+  ctx.restore();
+  ctx.font = Math.round(30 * U) + 'px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('🐲', px, py);
+  // sparkle trail
+  if (Math.random() < 0.4) spawnParticles(px - 14 * U, py + 6 * U, 1, '#9aff8f');
+  ctx.restore();
 }
 
 /* ---------- announce banner (queued, never overlaps) ---------- */
