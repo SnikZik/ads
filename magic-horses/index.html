@@ -578,6 +578,39 @@ function speak(text) {
 function stopSpeak() {
   try { if ('speechSynthesis' in window) speechSynthesis.cancel(); } catch (e) {}
 }
+/* queue another sentence after the current one (no cancel) */
+function speakMore(text) {
+  if (muted || !('speechSynthesis' in window)) return;
+  try {
+    const u = new SpeechSynthesisUtterance(text);
+    u.lang = 'he-IL';
+    if (heVoice) u.voice = heVoice;
+    u.rate = 0.95;
+    u.pitch = 1.05;
+    speechSynthesis.speak(u);
+  } catch (e) {}
+}
+/* speak only if nothing important is being said right now */
+function speakSoft(text) {
+  try { if ('speechSynthesis' in window && speechSynthesis.speaking) return; } catch (e) {}
+  speak(text);
+}
+function riderName() { return rider === 'dad' ? 'אבא' : 'שילה'; }
+/* cheering lines — the rider by name, plus baby Gabriel cheering from the side */
+function cheerLine() {
+  const n = riderName();
+  const lines = [
+    'כל הכבוד ' + n + '!',
+    'איזה אלוף אתה ' + n + '!',
+    'וואו ' + n + ', אתה טס!',
+    n + ', הסוס שלך גאה בך!',
+    'גבריאל התינוק מריע לך!',
+    'גבריאל מוחא כפיים!',
+    'תראה לגבריאל איך עפים!',
+    'גבריאל צוחק ואומר: עוד פעם!'
+  ];
+  return lines[Math.floor(Math.random() * lines.length)];
+}
 
 /* ---------- background music (light synth loop) ---------- */
 let musicTimer = null, musicStep = 0;
@@ -982,7 +1015,7 @@ function questProgress(type, amount) {
     snd.quest();
     spawnConfetti(40, W / 2, H * 0.35);
     announce('המשימה הושלמה! 🎉 +50', '#7bf07b', 36);
-    speak('כל הכבוד! המשימה הושלמה!');
+    speak('כל הכבוד ' + riderName() + '! המשימה הושלמה!');
     const chip = $('questChip');
     chip.classList.add('done');
     chip.textContent = '🎉 המשימה הושלמה! +50 נקודות';
@@ -1073,6 +1106,8 @@ function finishDuelRound(score) {
     $('duelFaceDad').classList.toggle('winner', d >= s);
     $('duelEndTitle').textContent = s === d ? 'תיקו! 🤝' : (s > d ? 'שילה ניצח! 🎉' : 'אבא ניצח! 🎉');
     $('duelEndScore').innerHTML = 'שילה: <b>' + s + '</b> · אבא: <b>' + d + '</b>';
+    speak(s === d ? 'תיקו! שניכם אלופים! גבריאל מוחא כפיים לשניכם!'
+      : (s > d ? 'שילה ניצח! גבריאל מריע לשילה!' : 'אבא ניצח! אבל שילה היה מדהים!'));
     spawnConfetti(80, W / 2, H * 0.3);
     setTimeout(() => show('duelEnd'), 700);
   }
@@ -1097,8 +1132,11 @@ function startCountdown(resume) {
   if (!resume && G.mode === 'level') {
     const b = BIOMES[G.fixedBiome % BIOMES.length];
     const q = currentQuest();
-    speak('שלב ' + curLevel + '. ' + b.name + '. המשימה: ' + (q.say ? q.say(q.target) : q.label(q.target)));
+    speak('קדימה ' + riderName() + '! שלב ' + curLevel + '. ' + b.name + '. המשימה: ' + (q.say ? q.say(q.target) : q.label(q.target)));
     announceBiome(G.fixedBiome);
+  }
+  if (!resume && G.mode === 'duel') {
+    speak(rider === 'shila' ? 'הקרב הגדול! שילה מתחיל! גבריאל צופה מהצד!' : 'עכשיו תור אבא! בהצלחה!');
   }
   showNum(n);
   beep(440, 440, 0.15, 'sine', 0.1);
@@ -1318,7 +1356,7 @@ function endGame() {
     $('overTitle').textContent = 'לא נורא!';
     $('overScore').innerHTML = 'שלב ' + curLevel + ' עוד מחכה לך<br>⭐ ' + G.stars + ' כוכבים בכל זאת נכנסו לארנק!';
     $('overBest').textContent = 'מנסים עוד פעם? 💪';
-    speak('לא נורא! מנסים עוד פעם!');
+    speak('לא נורא ' + riderName() + '! מנסים עוד פעם! גבריאל מאמין בך!');
     setTimeout(() => show('overScr'), 700);
     return;
   }
@@ -1366,7 +1404,8 @@ function levelComplete() {
     el.classList.remove('on');
     setTimeout(() => { if (i < rating) { el.classList.add('on'); beep(660 + i * 160, 660 + i * 160, 0.2, 'sine', 0.1); } }, 500 + i * 480);
   });
-  speak('כל הכבוד! סיימת את שלב ' + lvl + '! קיבלת ' + rating + ' כוכבי זהב!');
+  speak('איזה אלוף אתה ' + riderName() + '! סיימת את שלב ' + lvl + '! קיבלת ' + rating + ' כוכבי זהב!');
+  if (Math.random() < 0.55) speakMore('וגם גבריאל התינוק מוחא לך כפיים!');
   setTimeout(() => show('levelScr'), 600);
 }
 
@@ -1442,6 +1481,7 @@ function update(dt) {
     G.lastMilestone = Math.floor(G.dist / 100);
     announce(['וואו! 🌟', 'מדהים! 🌈', 'אלופים! 🏆', 'טסים! 🪽'][G.lastMilestone % 4], '#ffd94d', 38);
     snd.win();
+    if (Math.random() < 0.6) speakSoft(cheerLine());
   }
 
   // announcement queue — one banner at a time
@@ -1495,6 +1535,7 @@ function update(dt) {
       G.stars += 15;
       questProgress('stars', 15);
       announce('תפסת אותו! +15 ⭐', '#ffd24d', 38);
+      speakSoft('תפסת אותו ' + riderName() + '! מדהים!');
       snd.quest();
       spawnConfetti(30, gsx, gy2);
       G.gold = null;
