@@ -1719,8 +1719,8 @@ function update(dt) {
   const gravMul = G.lowGrav ? 0.52 : 1;
   const gy = groundY();
   if (G.holding) G.holdTime += dt;
-  // wing energy: ~2.5s of flight, recharges on the ground (bonus stages = free flight)
-  const freeFlight = !!G.bonusStage || G.boost > 0;
+  // שילה ביקש: תעופה חופשית תמיד — מד הכנפיים כבוי
+  const freeFlight = true;
   if (G.wingLock && G.wingE >= 30) G.wingLock = false;
   const energyOK = freeFlight || (G.wingE > 0 && !G.wingLock);
   const wantFly = G.holding && (G.holdTime > 0.18 || !G.onGround) && energyOK;
