@@ -467,6 +467,8 @@ function mixC(h1, h2, t) {
 /* ---------- sizing ---------- */
 let W = 0, H = 0, U = 1;
 function resize() {
+  // browsers can briefly report a 0-size viewport (background tab, mid-rotation) — keep the last good size
+  if (window.innerWidth < 50 || window.innerHeight < 50) return;
   const oldU = U, oldGy = H * 0.8, hadSize = H > 0;
   const dpr = Math.min(window.devicePixelRatio || 1, 2);
   W = window.innerWidth; H = window.innerHeight;
@@ -835,6 +837,12 @@ function resetGame() {
   G.pickups = [];
   G.rings = [];
   G.slowmo = 0;
+  G.announceQ = [];
+  G.announce = null;
+  G.bonusStage = null;
+  G.bonusPending = 0;
+  G.gold = null;
+  G.lastGold = 0;
   G.particles = [];
   G.ambient = [];
   G.confetti = [];
@@ -885,7 +893,7 @@ function questProgress(type, amount) {
     G.bonus += 50;
     snd.quest();
     spawnConfetti(40, W / 2, H * 0.35);
-    floaty('המשימה הושלמה! 🎉 +50', W / 2, H * 0.3, '#7bf07b', 34);
+    announce('המשימה הושלמה! 🎉 +50', '#7bf07b', 36);
     const chip = $('questChip');
     chip.classList.add('done');
     chip.textContent = '🎉 המשימה הושלמה! +50 נקודות';
@@ -1154,6 +1162,10 @@ function spawnConfetti(n, x, y) {
 function floaty(text, x, y, color, size) {
   G.floaties.push({ text: text, x: x, y: y, t: 0, life: 1.3, color: color || '#fff', size: (size || 26) * U });
 }
+/* center-screen announcements go through a queue — never overlap */
+function announce(text, color, size) {
+  G.announceQ.push({ text: text, color: color || '#ffd94d', size: size || 36 });
+}
 
 /* ---------- damage ---------- */
 function protectedNow() { return G.inv > 0 || G.boost > 0; }
@@ -1163,7 +1175,7 @@ function loseHeart(kind) {
     G.shield = false;
     G.inv = 1.2;
     snd.pop();
-    floaty('הבועה הגנה! 🫧', horseX(), groundY() - G.y - 150 * U, '#a8e6ff', 28);
+    announce('הבועה הגנה עליך! 🫧', '#a8e6ff', 32);
     spawnParticles(horseX(), groundY() - G.y - 60 * U, 12, '#a8e6ff');
     updateHUD();
     return;
@@ -1175,10 +1187,10 @@ function loseHeart(kind) {
   updateHUD();
   if (kind === 'lava') {
     snd.boing();
-    floaty('קפיצת לבה! 🔥', horseX(), groundY() - 180 * U, '#ffb347', 30);
+    announce('קפיצת לבה! 🔥', '#ffb347', 32);
   } else {
     snd.hit();
-    floaty("אאוץ'! 💫", horseX(), groundY() - 180 * U, '#ff8f8f', 30);
+    announce("אאוץ'! 💫", '#ff8f8f', 32);
   }
   if (G.hearts <= 0) endGame();
 }
@@ -1207,10 +1219,24 @@ function endGame() {
   setTimeout(() => show('overScr'), 700);
 }
 
+/* ---------- bonus stage ---------- */
+let bonusFlip = 0;
+function startBonus() {
+  if (state !== ST.PLAY) return;
+  const type = (bonusFlip++ % 2 === 0) ? 'starRain' : 'ringTunnel';
+  G.bonusStage = { type: type, t: 0, dur: 8.5, startStars: G.stars };
+  announce(type === 'starRain' ? '🎁 בונוס! גשם כוכבים!' : '🎁 בונוס! מנהרת הקשת!', '#ffd94d', 40);
+  snd.quest();
+  // clear the road: no hazards during the bonus
+  G.obstacles = G.obstacles.filter(o => o.x + o.w - G.x < horseX());
+  G.pickups = [];
+  G.nextSpawn = G.x + W + 5200 * U;
+}
+
 /* ---------- biome banner ---------- */
 let bannerTimer = null;
 function announceBiome(bi) {
-  const b = BIOMES[bi % BIOMES.length];
+  const b = BIOMES[((bi % BIOMES.length) + BIOMES.length) % BIOMES.length] || BIOMES[0];
   const el = $('biomeBanner');
   el.textContent = b.emoji + ' ' + b.name + ' ' + b.emoji;
   el.classList.add('show');
@@ -1237,17 +1263,78 @@ function update(dt) {
   G.squash *= Math.max(0, 1 - dt * 5);
   if (G.comboTimer > 0) { G.comboTimer -= dt; if (G.comboTimer <= 0) G.combo = 0; }
 
-  // biome change
+  // biome change → banner, then a bonus stage
   const bi = biomeAt(G.dist);
   if (bi !== G.lastBiome) {
     G.lastBiome = bi;
     announceBiome(bi);
+    G.bonusPending = 1.4;
   }
   // milestones
   if (Math.floor(G.dist / 100) > G.lastMilestone) {
     G.lastMilestone = Math.floor(G.dist / 100);
-    floaty(['וואו! 🌟', 'מדהים! 🌈', 'אלופים! 🏆', 'טסים! 🪽'][G.lastMilestone % 4], W / 2, H * 0.3, '#ffd94d', 38);
+    announce(['וואו! 🌟', 'מדהים! 🌈', 'אלופים! 🏆', 'טסים! 🪽'][G.lastMilestone % 4], '#ffd94d', 38);
     snd.win();
+  }
+
+  // announcement queue — one banner at a time
+  if (!G.announce && G.announceQ.length) { G.announce = G.announceQ.shift(); G.announce.t = 0; }
+  if (G.announce) { G.announce.t += dt; if (G.announce.t > 1.25) G.announce = null; }
+
+  // bonus stage between worlds
+  if (G.bonusPending > 0) {
+    G.bonusPending -= dt;
+    if (G.bonusPending <= 0) startBonus();
+  }
+  if (G.bonusStage) {
+    const b = G.bonusStage;
+    b.t += dt;
+    if (b.type === 'starRain') {
+      if (Math.random() < dt * 6) {
+        G.starsArr.push({ x: G.x + rand(W * 0.3, W + 60), y: -20 * U, t: rand(0, 6), got: false, fall: rand(70, 130) * U });
+      }
+    } else if (!b.ringsSpawned) {
+      b.ringsSpawned = true;
+      for (let i = 0; i < 6; i++) {
+        G.rings.push({ x: G.x + W + i * 250 * U, y: groundY() - (115 + Math.sin(i * 1.15) * 55) * U, t: 0, got: false });
+      }
+    }
+    if (b.t >= b.dur) {
+      const got = G.stars - b.startStars;
+      announce('🎁 אספת ' + got + ' כוכבים בבונוס!', '#7bf07b', 34);
+      spawnConfetti(24, W / 2, H * 0.32);
+      G.bonusStage = null;
+      G.nextSpawn = Math.max(G.nextSpawn, G.x + W + 300 * U);
+    }
+  }
+
+  // golden catch — mid-biome chase
+  if (!G.bonusStage && !G.gold && Math.floor((G.dist + 110) / BIOME_LEN) > G.lastGold && G.dist > 100) {
+    G.lastGold = Math.floor((G.dist + 110) / BIOME_LEN);
+    G.gold = { x: G.x + W + 60 * U, t: 0, dur: 7 };
+    announce('✨ תפוס את הארנב-דג הזהוב!', '#ffd24d', 34);
+    snd.power();
+  }
+  if (G.gold) {
+    const g = G.gold;
+    g.t += dt;
+    const spNow = G.speed * U * (G.boost > 0 ? 1.45 : 1);
+    g.x += spNow * dt * (g.t < g.dur ? 0.55 : 1.7); // drifts toward you, then escapes
+    const gsx = g.x - G.x;
+    const gy2 = groundY() - Math.abs(Math.sin(g.t * 4)) * 44 * U - 22 * U;
+    const hx2 = horseX();
+    if (Math.abs(gsx - hx2) < 42 * U && (groundY() - G.y) > gy2 - 60 * U) {
+      G.stars += 15;
+      questProgress('stars', 15);
+      announce('תפסת אותו! +15 ⭐', '#ffd24d', 38);
+      snd.quest();
+      spawnConfetti(30, gsx, gy2);
+      G.gold = null;
+      updateHUD();
+    } else if (g.t > g.dur && gsx > W + 120 * U) {
+      announce('הזהוב ברח! 🏃 פעם הבאה', '#c9b8ff', 30);
+      G.gold = null;
+    }
   }
   // quest advance (game-time, freezes on pause)
   if (G.qDone) {
@@ -1307,8 +1394,10 @@ function update(dt) {
 
   updateHUD();
 
-  // spawn
-  while (G.nextSpawn < G.x + W + 500 * U) spawnWave();
+  // spawn (paused during bonus stages)
+  if (!G.bonusStage) {
+    while (G.nextSpawn < G.x + W + 500 * U) spawnWave();
+  }
 
   // horse hitbox
   const hx = horseX(), hs = horseSize();
@@ -1362,6 +1451,10 @@ function update(dt) {
   for (const s of G.starsArr) {
     if (s.got) continue;
     s.t += dt;
+    if (s.fall) { // bonus star-rain: falls, then settles low
+      s.y += s.fall * dt;
+      if (s.y > groundY() - 34 * U) { s.y = groundY() - 34 * U; s.fall = 0; }
+    }
     const sx = s.x - G.x, sy = s.y + Math.sin(s.t * 3) * 7 * U;
     if (sx > hbx1 - 14 * U && sx < hbx2 + 14 * U && sy > hby1 - 16 * U && sy < hby2 + 16 * U) {
       s.got = true; s.done = true;
@@ -1372,7 +1465,7 @@ function update(dt) {
       if (G.combo > 0 && G.combo % 5 === 0) {
         G.bonus += 15;
         snd.combo(G.combo);
-        floaty('קומבו x' + G.combo + '! 🌈 +15', sx, sy - 50 * U, '#ff9aff', 32);
+        announce('קומבו x' + G.combo + '! 🌈 +15', '#ff9aff', 34);
       } else {
         snd.star();
       }
@@ -1396,7 +1489,7 @@ function update(dt) {
       questProgress('stars', 5);
       snd.power();
       spawnConfetti(16, sx, r.y);
-      floaty('דרך הקשת! +5 ⭐', sx, r.y - 46 * U, '#ff9aff', 30);
+      announce('דרך הקשת! +5 ⭐', '#ff9aff', 32);
       updateHUD();
     }
   }
@@ -1411,15 +1504,15 @@ function update(dt) {
       if (p.type === 'boost') {
         G.boost = 4;
         snd.power();
-        floaty('טורבו קשת! 🌈', hx, sy - 40 * U, '#ff9aff', 32);
+        announce('טורבו קשת! 🌈', '#ff9aff', 36);
       } else if (p.type === 'shield') {
         G.shield = true;
         snd.shield();
-        floaty('בועת קסם! 🫧', hx, sy - 40 * U, '#a8e6ff', 30);
+        announce('בועת קסם! 🫧', '#a8e6ff', 34);
       } else {
         G.hearts = Math.min(3, G.hearts + 1);
         snd.win();
-        floaty('❤️ +1', hx, sy - 40 * U, '#ff8f8f', 32);
+        announce('❤️ לב חזר!', '#ff8f8f', 34);
       }
       spawnParticles(sx, sy, 14, '#fff');
       updateHUD();
@@ -1500,6 +1593,7 @@ function draw() {
   drawStarsArr();
   drawRings();
   drawPickups();
+  drawGold();
   drawHorse();
   drawParticles();
   drawForeground();
@@ -1509,6 +1603,8 @@ function draw() {
   ctx.restore();
 
   drawVignette();
+  drawBonusFx();
+  drawAnnounce();
 }
 
 /* ---------- world (sky, hills, deco, ground) with biome blending ---------- */
@@ -1542,8 +1638,25 @@ function drawWorld() {
   }
   ctx.globalAlpha = 1;
 
-  // hills
-  drawHillLayer(scroll * 0.15, gy, mixC(A.hill, B.hill, t), 90, 0.6);
+  // hills — two layers for depth (far one fades toward the sky)
+  const hillC = mixC(A.hill, B.hill, t);
+  drawHillLayer(scroll * 0.07, gy, mixC(A.hill, B.sky ? mixC(A.sky[1], B.sky[1], t) : A.sky[1], 0.55), 120, 0.5);
+  drawHillLayer(scroll * 0.15, gy, hillC, 90, 0.65);
+
+  // drifting clouds (soft, all worlds; faint at night)
+  const nightish = (t > 0.5 ? B : A).celestial === 'moon';
+  ctx.fillStyle = 'rgba(255,255,255,' + (nightish ? 0.14 : 0.5) + ')';
+  for (let i = 0; i < 4; i++) {
+    const cw = (60 + i * 18) * U;
+    const cx2 = ((i * 340 * U) - (scroll * 0.06 + (G.t || 0) * 7 * U)) % (W + cw * 3);
+    const px = cx2 < -cw * 1.5 ? cx2 + W + cw * 3 : cx2;
+    const py = (H * 0.1) + (i * 53) % Math.max(1, Math.floor(H * 0.22));
+    ctx.beginPath();
+    ctx.arc(px, py, cw * 0.32, 0, 7);
+    ctx.arc(px - cw * 0.28, py + cw * 0.1, cw * 0.24, 0, 7);
+    ctx.arc(px + cw * 0.3, py + cw * 0.1, cw * 0.26, 0, 7);
+    ctx.fill();
+  }
 
   // deco layers (crossfade during blend)
   drawDeco(A.deco, scroll, gy, 1 - t);
@@ -1702,6 +1815,29 @@ function drawGroundDetail() {
     ctx.moveTo(x, gy + 22 * U); ctx.lineTo(x + 4 * U, gy + 13 * U);
     ctx.stroke();
   }
+  // scattered flowers + pebbles (seeded by world position)
+  const step = 132 * U;
+  const startI = Math.floor(G.x / step);
+  for (let i = startI; i < startI + Math.ceil(W / step) + 2; i++) {
+    const x = i * step - G.x;
+    const seed = ((i % 9) + 9) % 9;
+    const yy = gy + (24 + (seed % 3) * 9) * U;
+    if (seed % 3 === 0) {
+      ctx.fillStyle = 'rgba(120,120,130,.5)';
+      ctx.beginPath(); ctx.ellipse(x, yy, 6 * U, 4 * U, 0, 0, 7); ctx.fill();
+    } else {
+      const fc = ['#ff8fc0', '#ffd94d', '#c98fff', '#8fd0ff'][seed % 4];
+      ctx.fillStyle = fc;
+      for (let p = 0; p < 5; p++) {
+        const a = p / 5 * Math.PI * 2;
+        ctx.beginPath();
+        ctx.arc(x + Math.cos(a) * 3.6 * U, yy + Math.sin(a) * 3.6 * U, 2.6 * U, 0, 7);
+        ctx.fill();
+      }
+      ctx.fillStyle = '#fff';
+      ctx.beginPath(); ctx.arc(x, yy, 2.2 * U, 0, 7); ctx.fill();
+    }
+  }
 }
 
 /* ---------- trail ---------- */
@@ -1745,12 +1881,17 @@ function drawStarsArr() {
     const sx = s.x - G.x;
     if (sx < -40 || sx > W + 40) continue;
     const sy = s.y + Math.sin(s.t * 3) * 7 * U;
-    ctx.fillStyle = 'rgba(255,217,77,.16)';
-    ctx.beginPath(); ctx.arc(sx, sy, 15 * U, 0, 7); ctx.fill();
+    const pulse = 1 + Math.sin(s.t * 5) * 0.12;
+    ctx.fillStyle = 'rgba(255,217,77,' + (0.1 + Math.sin(s.t * 5) * 0.06) + ')';
+    ctx.beginPath(); ctx.arc(sx, sy, 16 * U * pulse, 0, 7); ctx.fill();
+    ctx.save();
+    ctx.translate(sx, sy);
+    ctx.rotate(Math.sin(s.t * 1.8) * 0.35);
     ctx.fillStyle = '#ffd94d';
-    drawStarShape(sx, sy, 13 * U);
+    drawStarShape(0, 0, 13 * U * pulse);
     ctx.fillStyle = '#fff3c4';
-    drawStarShape(sx, sy, 6 * U);
+    drawStarShape(0, 0, 6 * U * pulse);
+    ctx.restore();
   }
 }
 
@@ -2035,6 +2176,80 @@ function drawFloaties() {
   }
   ctx.globalAlpha = 1;
 }
+/* ---------- announce banner (queued, never overlaps) ---------- */
+function drawAnnounce() {
+  const a = G.announce;
+  if (!a) return;
+  const t = a.t;
+  const scale = t < 0.14 ? (t / 0.14) * 1.18 : t < 0.3 ? 1.18 - ((t - 0.14) / 0.16) * 0.18 : 1;
+  const fade = t > 1.0 ? 1 - (t - 1.0) / 0.25 : 1;
+  ctx.save();
+  ctx.globalAlpha = Math.max(0, fade);
+  ctx.translate(W / 2, H * 0.34);
+  ctx.scale(scale, scale);
+  ctx.font = '900 ' + Math.round(a.size * U) + 'px -apple-system, Arial';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  const w = ctx.measureText(a.text).width;
+  ctx.fillStyle = 'rgba(15,6,40,.55)';
+  ctx.beginPath();
+  const bw2 = w / 2 + 26 * U, bh2 = a.size * U * 0.85;
+  ctx.roundRect ? ctx.roundRect(-bw2, -bh2, bw2 * 2, bh2 * 2, bh2) : ctx.rect(-bw2, -bh2, bw2 * 2, bh2 * 2);
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(0,0,0,.45)';
+  ctx.lineWidth = 4 * U;
+  ctx.strokeText(a.text, 0, 0);
+  ctx.fillStyle = a.color;
+  ctx.fillText(a.text, 0, 0);
+  ctx.restore();
+}
+
+/* ---------- bonus stage golden glow + timer bar ---------- */
+function drawBonusFx() {
+  if (!G.bonusStage) return;
+  const b = G.bonusStage;
+  ctx.fillStyle = 'rgba(255,214,80,.07)';
+  ctx.fillRect(0, 0, W, H);
+  const frac = Math.max(0, 1 - b.t / b.dur);
+  const bw2 = W * 0.4 * frac;
+  ctx.fillStyle = 'rgba(0,0,0,.35)';
+  ctx.beginPath();
+  ctx.roundRect ? ctx.roundRect(W / 2 - W * 0.2, H * 0.155, W * 0.4, 8 * U, 5 * U) : ctx.rect(W / 2 - W * 0.2, H * 0.155, W * 0.4, 8 * U);
+  ctx.fill();
+  ctx.fillStyle = '#ffd94d';
+  ctx.beginPath();
+  ctx.roundRect ? ctx.roundRect(W / 2 - bw2 / 2, H * 0.155, bw2, 8 * U, 5 * U) : ctx.rect(W / 2 - bw2 / 2, H * 0.155, bw2, 8 * U);
+  ctx.fill();
+}
+
+/* ---------- the golden fish-bunny ---------- */
+function drawGold() {
+  if (!G.gold) return;
+  const g = G.gold;
+  const sx = g.x - G.x;
+  if (sx < -80 || sx > W + 200 * U) return;
+  const gy = groundY();
+  const hop = Math.abs(Math.sin(g.t * 4)) * 44 * U;
+  const cy = gy - 22 * U - hop;
+  const pulse = 1 + Math.sin(g.t * 8) * 0.12;
+  ctx.fillStyle = 'rgba(255,214,80,.3)';
+  ctx.beginPath(); ctx.arc(sx, cy, 34 * U * pulse, 0, 7); ctx.fill();
+  ctx.strokeStyle = 'rgba(255,214,80,.9)';
+  ctx.lineWidth = 3 * U;
+  ctx.beginPath(); ctx.arc(sx, cy, 30 * U * pulse, 0, 7); ctx.stroke();
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.font = Math.round(32 * U) + 'px sans-serif';
+  ctx.save();
+  ctx.translate(sx, cy);
+  ctx.rotate(-0.25 + Math.sin(g.t * 4) * 0.15);
+  ctx.fillText('🐟', 0, 6 * U);
+  ctx.restore();
+  ctx.font = Math.round(21 * U) + 'px sans-serif';
+  ctx.fillText('🐰', sx - 2 * U, cy - 15 * U);
+  if (Math.random() < 0.3) spawnParticles(sx + rand(-16, 16) * U, cy + rand(-14, 14) * U, 1, '#ffe27a');
+}
+
 function drawVignette() {
   const v = ctx.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.42, W / 2, H / 2, Math.max(W, H) * 0.75);
   v.addColorStop(0, 'rgba(0,0,0,0)');
@@ -2102,19 +2317,19 @@ function drawHorse() {
     drawWing(bx - s * 0.02, by - bh * 0.75, s, -0.35 + flap, isDad, 0.55);
   }
 
-  // ---- tail ----
+  // ---- tail: layered flowing ribbons ----
   ctx.lineCap = 'round';
   for (let i = 0; i < maneCols.length; i++) {
-    ctx.strokeStyle = maneCols[i % maneCols.length];
-    ctx.lineWidth = s * 0.055;
-    const wave = Math.sin(G.gallop * 0.8 + i) * s * 0.1;
+    const wave = Math.sin(G.gallop * 0.8 + i * 0.9) * s * 0.09;
+    const rootX = bx - bw * 0.92, rootY = by - bh * 0.25 + i * s * 0.022;
+    const tipX = bx - bw * 1.42 - i * s * 0.04, tipY = by + s * 0.3 + wave + i * s * 0.05;
+    ctx.fillStyle = maneCols[i % maneCols.length];
     ctx.beginPath();
-    ctx.moveTo(bx - bw * 0.95, by - bh * 0.2);
-    ctx.quadraticCurveTo(
-      bx - bw * 1.5, by + s * 0.05 + wave,
-      bx - bw * 1.35 - i * s * 0.03, by + s * 0.34 + wave + i * s * 0.045
-    );
-    ctx.stroke();
+    ctx.moveTo(rootX, rootY);
+    ctx.quadraticCurveTo(bx - bw * 1.45, by - s * 0.08 + wave, tipX, tipY);
+    ctx.quadraticCurveTo(bx - bw * 1.18, by + s * 0.1 + wave, rootX, rootY + s * 0.05);
+    ctx.closePath();
+    ctx.fill();
   }
 
   // ---- legs ----
@@ -2145,104 +2360,173 @@ function drawHorse() {
     ctx.beginPath(); ctx.arc(kx, ky, s * 0.055, 0, 7); ctx.fill();
   }
 
-  // ---- body ----
+  // ---- body: rounder, outlined, cel-shaded ----
   ctx.fillStyle = bodyC;
   ctx.strokeStyle = outline;
-  ctx.lineWidth = 2 * U;
+  ctx.lineWidth = 2.6 * U;
   ctx.beginPath();
-  ctx.ellipse(bx, by, bw, bh, -0.06, 0, 7);
+  ctx.ellipse(bx, by, bw, bh * 1.06, -0.06, 0, 7);
   ctx.fill();
   ctx.stroke();
+  // rump bump for a chunkier silhouette
+  ctx.fillStyle = bodyC;
+  ctx.beginPath();
+  ctx.ellipse(bx - bw * 0.62, by - bh * 0.12, bw * 0.4, bh * 0.82, 0.1, 0, 7);
+  ctx.fill();
+  // belly shade
   ctx.fillStyle = shadeC;
   ctx.beginPath();
-  ctx.ellipse(bx - bw * 0.1, by + bh * 0.45, bw * 0.7, bh * 0.4, 0, 0, 7);
+  ctx.ellipse(bx - bw * 0.08, by + bh * 0.5, bw * 0.68, bh * 0.38, 0, 0, 7);
   ctx.fill();
+  // cel highlight along the back
+  ctx.strokeStyle = 'rgba(255,255,255,.55)';
+  ctx.lineWidth = s * 0.045;
+  ctx.beginPath();
+  ctx.arc(bx - bw * 0.05, by + bh * 0.15, bw * 0.78, Math.PI * 1.22, Math.PI * 1.62);
+  ctx.stroke();
 
-  // ---- neck + head ----
-  const nx = bx + bw * 0.72, nyTop = by - bh * 1.55;
+  // ---- neck + BIG cute head ----
+  const nx = bx + bw * 0.66, nyTop = by - bh * 1.7;
+  const hxc = nx + s * 0.08, hyc = nyTop + s * 0.02;
+  // neck band
   ctx.fillStyle = bodyC;
+  ctx.strokeStyle = outline;
+  ctx.lineWidth = 2.6 * U;
   ctx.beginPath();
-  ctx.moveTo(bx + bw * 0.35, by + bh * 0.3);
-  ctx.quadraticCurveTo(bx + bw * 0.85, by - bh * 0.9, nx, nyTop);
-  ctx.lineTo(nx + s * 0.16, nyTop + s * 0.06);
-  ctx.quadraticCurveTo(bx + bw * 1.05, by - bh * 0.1, bx + bw * 0.7, by + bh * 0.5);
+  ctx.moveTo(bx + bw * 0.28, by + bh * 0.35);
+  ctx.quadraticCurveTo(bx + bw * 0.75, by - bh * 0.9, hxc - s * 0.09, hyc + s * 0.05);
+  ctx.lineTo(hxc + s * 0.08, hyc + s * 0.14);
+  ctx.quadraticCurveTo(bx + bw * 1.0, by - bh * 0.05, bx + bw * 0.62, by + bh * 0.55);
   ctx.closePath();
   ctx.fill();
+  // head (big round = cute)
+  ctx.fillStyle = bodyC;
   ctx.beginPath();
-  ctx.ellipse(nx + s * 0.14, nyTop + s * 0.02, s * 0.2, s * 0.13, 0.35, 0, 7);
+  ctx.arc(hxc, hyc, s * 0.185, 0, 7);
+  ctx.fill();
+  ctx.stroke();
+  // muzzle
+  ctx.fillStyle = shadeC;
+  ctx.beginPath();
+  ctx.ellipse(hxc + s * 0.15, hyc + s * 0.07, s * 0.1, s * 0.078, 0.25, 0, 7);
   ctx.fill();
   ctx.strokeStyle = outline;
   ctx.stroke();
-  ctx.fillStyle = shadeC;
-  ctx.beginPath();
-  ctx.ellipse(nx + s * 0.3, nyTop + s * 0.08, s * 0.085, s * 0.07, 0.3, 0, 7);
-  ctx.fill();
+  // nostril + smile
   ctx.fillStyle = '#8f6f9f';
-  ctx.beginPath(); ctx.arc(nx + s * 0.33, nyTop + s * 0.075, s * 0.015, 0, 7); ctx.fill();
-  // eye
+  ctx.beginPath(); ctx.arc(hxc + s * 0.2, hyc + s * 0.045, s * 0.016, 0, 7); ctx.fill();
+  ctx.strokeStyle = '#8f6f9f';
+  ctx.lineWidth = s * 0.018;
+  ctx.beginPath();
+  ctx.arc(hxc + s * 0.15, hyc + s * 0.08, s * 0.05, 0.3, Math.PI * 0.75);
+  ctx.stroke();
+  // blush cheek
+  ctx.fillStyle = 'rgba(255,130,170,.4)';
+  ctx.beginPath();
+  ctx.ellipse(hxc + s * 0.075, hyc + s * 0.06, s * 0.045, s * 0.032, 0, 0, 7);
+  ctx.fill();
+  // big sparkly eye with a blink
+  const blink = ((G.t % 3.4) > 3.26) ? 0.12 : 1;
+  ctx.save();
+  ctx.translate(hxc + s * 0.015, hyc - s * 0.035);
+  ctx.scale(1, blink);
   ctx.fillStyle = '#fff';
-  ctx.beginPath(); ctx.arc(nx + s * 0.13, nyTop - s * 0.015, s * 0.05, 0, 7); ctx.fill();
-  ctx.fillStyle = '#3a2a4a';
-  ctx.beginPath(); ctx.arc(nx + s * 0.145, nyTop - s * 0.01, s * 0.03, 0, 7); ctx.fill();
+  ctx.beginPath(); ctx.arc(0, 0, s * 0.068, 0, 7); ctx.fill();
+  ctx.fillStyle = '#4a2a6b';
+  ctx.beginPath(); ctx.arc(s * 0.012, s * 0.006, s * 0.046, 0, 7); ctx.fill();
   ctx.fillStyle = '#fff';
-  ctx.beginPath(); ctx.arc(nx + s * 0.155, nyTop - s * 0.02, s * 0.011, 0, 7); ctx.fill();
-  // ear
+  ctx.beginPath(); ctx.arc(s * 0.028, -s * 0.012, s * 0.016, 0, 7); ctx.fill();
+  ctx.beginPath(); ctx.arc(-s * 0.008, s * 0.02, s * 0.008, 0, 7); ctx.fill();
+  ctx.restore();
+  // eyelash
+  ctx.strokeStyle = '#4a2a6b';
+  ctx.lineWidth = s * 0.016;
+  ctx.beginPath();
+  ctx.arc(hxc + s * 0.015, hyc - s * 0.035, s * 0.07, Math.PI * 1.15, Math.PI * 1.6);
+  ctx.stroke();
+  // ear with a twitch + pink inner
+  const earTw = Math.sin(G.t * 3.1) * 0.12;
+  ctx.save();
+  ctx.translate(hxc - s * 0.07, hyc - s * 0.15);
+  ctx.rotate(earTw);
   ctx.fillStyle = bodyC;
   ctx.beginPath();
-  ctx.moveTo(nx + s * 0.02, nyTop - s * 0.1);
-  ctx.lineTo(nx + s * 0.08, nyTop - s * 0.22);
-  ctx.lineTo(nx + s * 0.14, nyTop - s * 0.09);
+  ctx.moveTo(-s * 0.045, s * 0.02);
+  ctx.lineTo(s * 0.005, -s * 0.13);
+  ctx.lineTo(s * 0.055, s * 0.02);
   ctx.closePath();
   ctx.fill();
+  ctx.strokeStyle = outline; ctx.lineWidth = 2 * U; ctx.stroke();
+  ctx.fillStyle = '#ffb0c8';
+  ctx.beginPath();
+  ctx.moveTo(-s * 0.02, s * 0.01);
+  ctx.lineTo(s * 0.005, -s * 0.08);
+  ctx.lineTo(s * 0.03, s * 0.01);
+  ctx.closePath();
+  ctx.fill();
+  ctx.restore();
   if (!isDad) {
-    const hg = ctx.createLinearGradient(nx + s * 0.1, nyTop - s * 0.3, nx + s * 0.2, nyTop - s * 0.08);
+    // unicorn horn with spiral
+    const hg = ctx.createLinearGradient(hxc, hyc - s * 0.4, hxc + s * 0.1, hyc - s * 0.15);
     hg.addColorStop(0, '#ffd94d'); hg.addColorStop(1, '#ffaa3d');
     ctx.fillStyle = hg;
     ctx.beginPath();
-    ctx.moveTo(nx + s * 0.13, nyTop - s * 0.1);
-    ctx.lineTo(nx + s * 0.21, nyTop - s * 0.32);
-    ctx.lineTo(nx + s * 0.24, nyTop - s * 0.08);
+    ctx.moveTo(hxc - s * 0.005, hyc - s * 0.155);
+    ctx.lineTo(hxc + s * 0.055, hyc - s * 0.4);
+    ctx.lineTo(hxc + s * 0.095, hyc - s * 0.14);
     ctx.closePath();
     ctx.fill();
+    ctx.strokeStyle = 'rgba(180,110,20,.6)';
+    ctx.lineWidth = s * 0.014;
+    ctx.beginPath();
+    ctx.moveTo(hxc + s * 0.015, hyc - s * 0.21);
+    ctx.lineTo(hxc + s * 0.075, hyc - s * 0.23);
+    ctx.moveTo(hxc + s * 0.03, hyc - s * 0.28);
+    ctx.lineTo(hxc + s * 0.07, hyc - s * 0.3);
+    ctx.stroke();
   } else {
+    // sheriff star for סייחי
     ctx.fillStyle = '#ffd94d';
-    drawStarShape(nx + s * 0.1, nyTop - s * 0.14, s * 0.05);
+    drawStarShape(hxc - s * 0.01, hyc - s * 0.11, s * 0.05);
   }
 
-  // crown accessory on the horse's head
+  // crown accessory sits on top of the head
   if (equippedSet.has('crown')) {
-    const cx0 = nx - s * 0.02, cy0 = nyTop - s * 0.16;
+    const cx0 = hxc - s * 0.05, cy0 = hyc - s * 0.19;
     ctx.fillStyle = '#ffd24d';
     ctx.beginPath();
-    ctx.moveTo(cx0 - s * 0.09, cy0);
-    ctx.lineTo(cx0 - s * 0.09, cy0 - s * 0.05);
-    ctx.lineTo(cx0 - s * 0.05, cy0 - s * 0.015);
-    ctx.lineTo(cx0 - s * 0.015, cy0 - s * 0.085);
-    ctx.lineTo(cx0 + s * 0.02, cy0 - s * 0.015);
-    ctx.lineTo(cx0 + s * 0.06, cy0 - s * 0.05);
+    ctx.moveTo(cx0 - s * 0.08, cy0);
+    ctx.lineTo(cx0 - s * 0.08, cy0 - s * 0.055);
+    ctx.lineTo(cx0 - s * 0.045, cy0 - s * 0.018);
+    ctx.lineTo(cx0 - s * 0.01, cy0 - s * 0.09);
+    ctx.lineTo(cx0 + s * 0.025, cy0 - s * 0.018);
+    ctx.lineTo(cx0 + s * 0.06, cy0 - s * 0.055);
     ctx.lineTo(cx0 + s * 0.06, cy0);
     ctx.closePath();
     ctx.fill();
     ctx.fillStyle = '#ff5f8f';
-    ctx.beginPath(); ctx.arc(cx0 - s * 0.015, cy0 - s * 0.03, s * 0.016, 0, 7); ctx.fill();
+    ctx.beginPath(); ctx.arc(cx0 - s * 0.01, cy0 - s * 0.032, s * 0.017, 0, 7); ctx.fill();
   }
 
-  // ---- mane along neck ----
+  // ---- mane: filled ribbons flowing from the head down the neck ----
   for (let i = 0; i < maneCols.length; i++) {
-    ctx.strokeStyle = maneCols[i];
-    ctx.lineWidth = s * 0.055;
     const k = i / Math.max(maneCols.length - 1, 1);
-    const wave = Math.sin(G.gallop * 0.9 + i * 1.3) * s * 0.06;
-    const px0 = nx + s * 0.02 - k * (nx + s * 0.02 - (bx + bw * 0.4));
-    const py0 = nyTop + s * 0.02 + k * ((by - bh * 0.55) - (nyTop + s * 0.02));
+    const wave = Math.sin(G.gallop * 0.9 + i * 1.2) * s * 0.05;
+    const rx = hxc - s * 0.1 - k * (hxc - s * 0.1 - (bx + bw * 0.3));
+    const ry = hyc - s * 0.06 + k * ((by - bh * 0.5) - (hyc - s * 0.06));
+    ctx.fillStyle = maneCols[i];
     ctx.beginPath();
-    ctx.moveTo(px0, py0);
-    ctx.quadraticCurveTo(
-      px0 - s * 0.16 + wave, py0 - s * 0.06,
-      px0 - s * 0.24 + wave, py0 + s * 0.1
-    );
-    ctx.stroke();
+    ctx.moveTo(rx, ry);
+    ctx.quadraticCurveTo(rx - s * 0.14 + wave, ry - s * 0.02, rx - s * 0.2 + wave, ry + s * 0.12);
+    ctx.quadraticCurveTo(rx - s * 0.08 + wave, ry + s * 0.1, rx + s * 0.02, ry + s * 0.07);
+    ctx.closePath();
+    ctx.fill();
   }
+  // forelock tuft over the forehead
+  ctx.fillStyle = maneCols[0];
+  ctx.beginPath();
+  ctx.ellipse(hxc - s * 0.05, hyc - s * 0.13, s * 0.065, s * 0.035, -0.5, 0, 7);
+  ctx.fill();
 
   // ---- saddle ----
   ctx.fillStyle = saddleC;
@@ -2412,7 +2696,8 @@ let lastT = performance.now();
 function loop(now) {
   const dt = Math.min((now - lastT) / 1000, 0.05);
   lastT = now;
-  const sizeChanged = window.innerWidth !== W || window.innerHeight !== H;
+  const sizeChanged = window.innerWidth > 50 && window.innerHeight > 50 &&
+    (window.innerWidth !== W || window.innerHeight !== H);
   if (sizeChanged) resize(); // iPad rotation safety
   // paint only when something moves — saves battery on HOME/PAUSE/OVER,
   // where the canvas is covered or frozen under a backdrop blur
