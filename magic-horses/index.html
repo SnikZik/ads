@@ -33,6 +33,7 @@
     z-index: 10;
     padding: 12px;
     padding-top: max(12px, env(safe-area-inset-top));
+    overflow-y: auto; /* buttons always reachable, even in landscape */
   }
   .hidden { display: none !important; }
 
@@ -319,6 +320,45 @@
   #countdown.pop { animation: cdpop .55s ease-out; }
   @keyframes cdpop { 0% { transform: scale(2.2); opacity: 0; } 60% { transform: scale(.95); opacity: 1; } 100% { transform: scale(1); } }
   input[type=file] { display: none; }
+
+  /* iPad landscape: compact everything so the buttons fit on screen.
+     Must stay LAST in the stylesheet to win the cascade. */
+  @media (max-height: 540px) {
+    .screen { gap: 7px; padding: 8px; justify-content: flex-start; }
+    .screen > :first-child { margin-top: auto; }
+    .screen > :last-child { margin-bottom: auto; }
+    .bigEmoji { font-size: 36px; animation: none; }
+    .lvlStars { font-size: 36px; gap: 10px; }
+    .lvlStars span { transform: scale(.8); }
+    .lvlStars span.on { transform: scale(1); }
+    .overTitle { font-size: 23px; }
+    .overScore { font-size: 14px; line-height: 1.3; }
+    .overBest { font-size: 12px; }
+    .title { font-size: 21px; animation: none; }
+    .subtitle { font-size: 13px; }
+    .face { width: 58px; height: 58px; font-size: 32px; border-width: 3px; }
+    .cname { font-size: 16px; }
+    .hname { font-size: 11px; }
+    .card { padding: 8px 8px 6px; border-radius: 16px; width: min(180px, 32vw); gap: 4px; }
+    .cards { gap: 10px; }
+    .bigBtn { padding: 9px 20px; font-size: 17px; border-radius: 14px; }
+    .btnRow { gap: 8px; }
+    .homeBtn { padding: 7px 14px; font-size: 13px; }
+    .bestChip, .wallet { padding: 3px 12px; font-size: 12px; }
+    .hint { font-size: 10px; }
+    .miniBtn { padding: 4px 10px; font-size: 10px; }
+    .duelFaces { gap: 12px; }
+    .duelFace { width: 52px !important; height: 52px !important; font-size: 28px !important; }
+    .duelVs { font-size: 18px; }
+    .duelScore { font-size: 14px; }
+    .nameBtn { padding: 9px 4px; font-size: 16px; }
+    .nameGrid { gap: 8px; }
+    .shopGrid { gap: 7px; }
+    .shopItem { padding: 6px 4px; gap: 2px; }
+    .shopItem .ie { font-size: 22px; }
+    .shopItem .in { font-size: 11px; }
+    .shopItem .ip { font-size: 9px; }
+  }
 </style>
 </head>
 <body>
@@ -362,6 +402,7 @@
   <div class="homeBtns">
     <button class="homeBtn" id="btnDuel">🏆 אבא נגד שילה</button>
     <button class="homeBtn" id="btnStable">🏇 האורווה</button>
+    <button class="homeBtn" id="btnFriends" style="background:linear-gradient(160deg,#b8ff7e,#2fa84f)">👫 החברים</button>
   </div>
   <div class="bestChip" id="levelChip">🎮 שלב 1</div>
   <div class="bestChip" id="bestChip">🏆 עוד אין שיא — קדימה!</div>
@@ -382,6 +423,16 @@
   <div class="hint">אוספים כוכבים במשחק, קונים כאן, ולובשים על הסוס!</div>
   <div class="btnRow">
     <button class="bigBtn btnHome" id="btnStableBack">חזרה 🏠</button>
+  </div>
+</div>
+
+<!-- FRIENDS (collectable companions) -->
+<div id="friendsScr" class="screen hidden" style="background:linear-gradient(180deg,#1a4a2b,#3fa060)">
+  <div class="title">👫 צוות הקסם</div>
+  <div class="hint">מסיימים שלבים — חברים חדשים מצטרפים! החבר שנבחר טס איתך עם כוח מיוחד</div>
+  <div class="shopGrid" id="friendsGrid"></div>
+  <div class="btnRow">
+    <button class="bigBtn btnHome" id="btnFriendsBack">חזרה 🏠</button>
   </div>
 </div>
 
@@ -790,7 +841,8 @@ function pickName(n) {
 /* ---------- screens ---------- */
 const screens = {
   home: $('home'), namePick: $('namePick'), pauseScr: $('pauseScr'), overScr: $('overScr'),
-  stableScr: $('stableScr'), duelMid: $('duelMid'), duelEnd: $('duelEnd'), levelScr: $('levelScr')
+  stableScr: $('stableScr'), duelMid: $('duelMid'), duelEnd: $('duelEnd'), levelScr: $('levelScr'),
+  friendsScr: $('friendsScr')
 };
 function show(name) {
   Object.entries(screens).forEach(([k, el]) => el.classList.toggle('hidden', k !== name));
@@ -852,6 +904,44 @@ function buildShop() {
 $('btnStable').addEventListener('click', () => { initAudio(); buildShop(); refreshWallet(); show('stableScr'); });
 $('btnStableBack').addEventListener('click', () => show('home'));
 refreshWallet();
+
+/* ---------- collectable friends (צוות הקסם) ---------- */
+const FRIENDS = [
+  { id: 'fairy', e: '🧚', n: 'נועה הפיה',  at: 2,  perk: 'magnet', pd: 'מושכת כוכבים אליך!' },
+  { id: 'robot', e: '🤖', n: 'רובי הרובוט', at: 4,  perk: 'shield', pd: 'בועת מגן בתחילת כל שלב!' },
+  { id: 'uni',   e: '🦄', n: 'קרן הקטנה',  at: 6,  perk: 'boost',  pd: 'טורבו קשת בתחילת שלב!' },
+  { id: 'drag',  e: '🐲', n: 'דרקוני',     at: 8,  perk: 'zap',    pd: 'בא לעזור פעמיים בשלב!' },
+  { id: 'astro', e: '👨‍🚀', n: 'אסטרו',     at: 10, perk: 'luck',   pd: 'הרבה יותר מתנות קסם!' },
+  { id: 'lion',  e: '🦁', n: 'ליאו האמיץ', at: 12, perk: 'magnet2', pd: 'מגנט כוכבים ענק!' }
+];
+let equippedFriend = store.get('mh_friend', '');
+function friendUnlocked(f) { return curLevel > f.at; }
+function currentFriend() {
+  const f = FRIENDS.find(fr => fr.id === equippedFriend);
+  return f && friendUnlocked(f) ? f : null;
+}
+function buildFriends() {
+  const g = $('friendsGrid');
+  g.innerHTML = '';
+  FRIENDS.forEach(f => {
+    const un = friendUnlocked(f), eq = equippedFriend === f.id;
+    const b = document.createElement('button');
+    b.className = 'shopItem ' + (eq ? 'equipped' : un ? 'ownedOff' : 'locked');
+    b.innerHTML = '<div class="ie">' + (un ? f.e : '🔒') + '</div><div class="in">' + f.n + '</div><div class="ip">' +
+      (un ? (eq ? 'טס איתך! ✓' : f.pd) : 'מסיימים שלב ' + f.at) + '</div>';
+    b.addEventListener('click', () => {
+      initAudio();
+      if (!un) { snd.hit(); return; }
+      equippedFriend = eq ? '' : f.id;
+      store.set('mh_friend', equippedFriend);
+      snd.star();
+      buildFriends();
+    });
+    g.appendChild(b);
+  });
+}
+$('btnFriends').addEventListener('click', () => { initAudio(); buildFriends(); show('friendsScr'); });
+$('btnFriendsBack').addEventListener('click', () => show('home'));
 
 /* ---------- biomes ---------- */
 const BIOME_LEN = 220; // meters — new world roughly every 30 sec
@@ -1001,6 +1091,13 @@ function resetGame() {
   G.boss = null;
   G.fireballs = [];
   G.failReason = null;
+  // equipped friend perks kick in at the start of a run
+  const fr = typeof currentFriend === 'function' ? currentFriend() : null;
+  G.friendPerk = fr ? fr.perk : null;
+  G.friendEmoji = fr ? fr.e : null;
+  G.petMax = G.friendPerk === 'zap' ? 2 : 1;
+  G.petCount = 0;
+  G.petAt2 = 0.8;
   G.petAt = 0.42 + Math.random() * 0.25;
   G.pet = null;
   G.petUsed = false;
@@ -1063,6 +1160,9 @@ function resetGame() {
   G.qAdvT = 0;
   G.qStartDist = 0;
   G._qChipText = '';
+  // friend perks that apply at run start
+  if (G.friendPerk === 'shield') G.shield = true;
+  if (G.friendPerk === 'boost') G.boost = 4;
   updateHUD();
   updateQuestChip();
 }
@@ -1373,8 +1473,8 @@ function spawnWave() {
     width = 150 * U;
   }
 
-  // power-up every ~200-300m of travel (the 'rich' twist doubles the pace)
-  G.sincePower += G.twist === 'rich' ? 2 : 1;
+  // power-up every ~200-300m of travel ('rich' twist or Astro friend double the pace)
+  G.sincePower += (G.twist === 'rich' ? 2 : 1) + (G.friendPerk === 'luck' ? 1 : 0);
   if (d > 100 && G.sincePower > rand(5, 8)) {
     G.sincePower = 0;
     const opts = ['boost', 'shield'];
@@ -1394,9 +1494,11 @@ function spawnWave() {
   if (pick !== 'stars' && Math.random() < 0.4) {
     addStarArc(sx + width + gap * 0.55, groundY() - rand(50, 90) * U, 3);
   }
-  // rainbow ring to fly through — bonus stars
+  // rainbow ring to fly through — bonus stars (from level 4: some rings are RED — avoid them!)
   if (d > 140 && Math.random() < 0.16) {
-    G.rings.push({ x: sx + width + gap * 0.45, y: groundY() - rand(140, 185) * U, t: rand(0, 6), got: false });
+    const lvlNow2 = G.mode === 'level' ? curLevel : Math.floor(d / 400) + 2;
+    const bad = lvlNow2 >= 4 && Math.random() < 0.3;
+    G.rings.push({ x: sx + width + gap * 0.45, y: groundY() - rand(140, 185) * U, t: rand(0, 6), got: false, bad: bad });
   }
   G.nextSpawn = sx + gap;
 }
@@ -1538,6 +1640,14 @@ function levelComplete() {
   $('lvlScore').innerHTML = '⭐ ' + G.stars + ' כוכבים נכנסו לארנק' +
     (missionDone ? '<br>🎯 המשימה הושלמה!' : '') +
     (G.heartsLost === 0 ? '<br>❤️ בלי פגיעה אחת!' : '');
+  // new friend joins the team at set levels
+  const newFriend = FRIENDS.find(f => f.at === lvl);
+  if (newFriend) {
+    if (!equippedFriend) { equippedFriend = newFriend.id; store.set('mh_friend', equippedFriend); }
+    $('lvlScore').innerHTML = '<b style="color:#7bf07b">' + newFriend.e + ' חבר חדש: ' + newFriend.n + '!</b> ' + newFriend.pd + '<br>' + $('lvlScore').innerHTML;
+    speakMore('הפתעה ענקית! ' + newFriend.n + ' הצטרף לצוות הקסם שלך!');
+    spawnConfetti(60, W / 2, H * 0.4);
+  }
   ['ls1', 'ls2', 'ls3'].forEach((id, i) => {
     const el = $(id);
     el.classList.remove('on');
@@ -1679,9 +1789,16 @@ function update(dt) {
       }
     } else if (!b.ringsSpawned) {
       b.ringsSpawned = true;
+      const withRed = (G.mode === 'level' ? curLevel : 5) >= 4;
       for (let i = 0; i < 6; i++) {
-        G.rings.push({ x: G.x + W + i * 250 * U, y: groundY() - (115 + Math.sin(i * 1.15) * 55) * U, t: 0, got: false });
+        G.rings.push({
+          x: G.x + W + i * 250 * U,
+          y: groundY() - (115 + Math.sin(i * 1.15) * 55) * U,
+          t: 0, got: false,
+          bad: withRed && (i === 2 || i === 4) // fixed pattern — learnable, fair
+        });
       }
+      if (withRed) speak('זהירות! רק דרך הטבעות הירוקות! אדום אסור!');
     }
     if (b.t >= b.dur) {
       const got = G.stars - b.startStars;
@@ -1872,7 +1989,9 @@ function update(dt) {
     }
   }
 
-  // stars
+  // stars (fairy/lion friends pull them toward you)
+  const magnetR = G.friendPerk === 'magnet' ? 105 * U : G.friendPerk === 'magnet2' ? 165 * U : 0;
+  const horseCy = gy - G.y - hs * 0.45;
   G.starsArr = G.starsArr.filter(s => s.x - G.x > -80 * U && !s.done);
   for (const s of G.starsArr) {
     if (s.got) continue;
@@ -1880,6 +1999,13 @@ function update(dt) {
     if (s.fall) { // bonus star-rain: falls, then settles low
       s.y += s.fall * dt;
       if (s.y > groundY() - 34 * U) { s.y = groundY() - 34 * U; s.fall = 0; }
+    }
+    if (magnetR) {
+      const dx = (G.x + hx) - s.x, dy = horseCy - s.y;
+      if (dx * dx + dy * dy < magnetR * magnetR && dx > -20 * U) {
+        s.x += dx * 4 * dt;
+        s.y += dy * 4 * dt;
+      }
     }
     const sx = s.x - G.x, sy = s.y + Math.sin(s.t * 3) * 7 * U;
     if (sx > hbx1 - 14 * U && sx < hbx2 + 14 * U && sy > hby1 - 16 * U && sy < hby2 + 16 * U) {
@@ -1990,9 +2116,10 @@ function update(dt) {
     }
   }
 
-  // dragon helper — from level 3, once per level
-  if (G.mode === 'level' && curLevel >= 3 && !G.petUsed && !G.bonusStage && G.dist / G.levelLen > G.petAt) {
-    G.petUsed = true;
+  // dragon helper — from level 3 (Dragoni friend makes him come twice)
+  const petThreshold = G.petCount === 0 ? G.petAt : G.petAt2;
+  if (G.mode === 'level' && curLevel >= 3 && G.petCount < G.petMax && !G.pet && !G.bonusStage && G.dist / G.levelLen > petThreshold) {
+    G.petCount++;
     G.pet = { t: 0, dur: 6 };
     announce('🐲 דרקוני בא לעזור!', '#7bf07b', 36);
     speak('דרקוני הקטן בא לעזור לך ' + riderName() + '!');
@@ -2025,12 +2152,19 @@ function update(dt) {
     const horseCy = gy - G.y - hs * 0.42;
     if (Math.abs(sx - hx) < 22 * U && Math.abs(horseCy - r.y) < 42 * U) {
       r.got = true; r.done = true;
-      G.stars += 5;
-      G.bonus += 10;
-      questProgress('stars', 5);
-      snd.power();
-      spawnConfetti(16, sx, r.y);
-      announce('דרך הקשת! +5 ⭐', '#ff9aff', 32);
+      if (r.bad) {
+        G.stars = Math.max(0, G.stars - 2);
+        beep(240, 110, 0.25, 'square', 0.09);
+        floaty('אדום! ❌ -2', sx, r.y - 40 * U, '#ff6a6a', 26);
+        spawnParticles(sx, r.y, 8, '#ff6a6a');
+      } else {
+        G.stars += 5;
+        G.bonus += 10;
+        questProgress('stars', 5);
+        snd.power();
+        spawnConfetti(16, sx, r.y);
+        announce('דרך הקשת! +5 ⭐', '#ff9aff', 32);
+      }
       updateHUD();
     }
   }
@@ -2142,6 +2276,7 @@ function draw() {
   drawGold();
   drawHorse();
   drawPet();
+  drawFriend();
   drawBoss();
   drawWingBar();
   drawParticles();
@@ -2553,13 +2688,21 @@ function drawRings() {
     const sx = r.x - G.x;
     if (sx < -110 || sx > W + 110) continue;
     const pulse = 1 + Math.sin(r.t * 4) * 0.05;
-    for (let i = 0; i < RING_COLS.length; i++) {
-      ctx.strokeStyle = RING_COLS[i];
+    const cols = r.bad ? ['#ff4a4a', '#d82a2a', '#ff7a5a', '#c02020', '#ff5f5f', '#e83a3a'] : RING_COLS;
+    for (let i = 0; i < cols.length; i++) {
+      ctx.strokeStyle = cols[i];
       ctx.lineWidth = 5 * U;
       ctx.globalAlpha = 0.9;
       ctx.beginPath();
       ctx.arc(sx, r.y, (46 - i * 5) * U * pulse, 0, 7);
       ctx.stroke();
+    }
+    if (r.bad) {
+      ctx.globalAlpha = 0.9;
+      ctx.font = Math.round(20 * U) + 'px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('❌', sx, r.y);
     }
     ctx.globalAlpha = 0.15;
     ctx.fillStyle = '#fff';
@@ -3145,6 +3288,22 @@ function drawWingBar() {
   ctx.font = Math.round(11 * U) + 'px sans-serif';
   ctx.textAlign = 'center';
   ctx.fillText('🪽', hx - bw2 / 2 - 10 * U, topY + 5 * U);
+}
+
+/* ---------- equipped friend flies alongside ---------- */
+function drawFriend() {
+  if (!G.friendEmoji || state === ST.HOME) return;
+  const px = horseX() - 62 * U + Math.sin(G.t * 2.3) * 8 * U;
+  const py = groundY() - G.y - 128 * U + Math.sin(G.t * 3.4) * 10 * U;
+  ctx.save();
+  ctx.fillStyle = 'rgba(255,255,255,.18)';
+  ctx.beginPath(); ctx.arc(px, py, 20 * U, 0, 7); ctx.fill();
+  ctx.font = Math.round(26 * U) + 'px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(G.friendEmoji, px, py);
+  if (Math.random() < 0.12) spawnParticles(px - 10 * U, py + 10 * U, 1, '#c8ffd8');
+  ctx.restore();
 }
 
 /* ---------- GIANT bosses ---------- */
