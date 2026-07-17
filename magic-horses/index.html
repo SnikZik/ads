@@ -167,6 +167,12 @@
   .shopItem.ownedOff { border-color: #7bf07b; opacity: .8; }
   .shopItem.locked { opacity: .55; }
 
+  /* ---- level complete ---- */
+  .lvlStars { display: flex; gap: 14px; font-size: clamp(44px, 10vw, 76px); }
+  .lvlStars span { opacity: .25; transform: scale(.7); transition: all .35s cubic-bezier(.2, 2, .4, 1); }
+  .lvlStars span.on { opacity: 1; transform: scale(1); filter: drop-shadow(0 0 14px #ffd94d); }
+  #questChip { pointer-events: auto; cursor: pointer; }
+
   /* ---- duel ---- */
   .duelFaces { display: flex; gap: 24px; align-items: center; }
   .duelFace {
@@ -357,6 +363,7 @@
     <button class="homeBtn" id="btnDuel">🏆 אבא נגד שילה</button>
     <button class="homeBtn" id="btnStable">🏇 האורווה</button>
   </div>
+  <div class="bestChip" id="levelChip">🎮 שלב 1</div>
   <div class="bestChip" id="bestChip">🏆 עוד אין שיא — קדימה!</div>
   <div class="bestChip" id="walletChip">⭐ בארנק: 0</div>
   <div class="hint">טאפ = קפיצה &nbsp;·&nbsp; מחזיקים = כנפיים ועפים! 🪽</div>
@@ -419,6 +426,18 @@
   <div class="btnRow">
     <button class="bigBtn btnGo" id="btnResume">ממשיכים! 🐴</button>
     <button class="bigBtn btnHome" id="btnPauseHome">הביתה 🏠</button>
+  </div>
+</div>
+
+<!-- LEVEL COMPLETE -->
+<div id="levelScr" class="screen overlay hidden">
+  <div class="bigEmoji">🏁</div>
+  <div class="overTitle" id="lvlTitle">שלב הושלם!</div>
+  <div class="lvlStars"><span id="ls1">⭐</span><span id="ls2">⭐</span><span id="ls3">⭐</span></div>
+  <div class="overScore" id="lvlScore"></div>
+  <div class="btnRow">
+    <button class="bigBtn btnGo" id="btnNextLevel">לשלב הבא! ⏭️</button>
+    <button class="bigBtn btnHome" id="btnLvlHome">הביתה 🏠</button>
   </div>
 </div>
 
@@ -531,6 +550,34 @@ const snd = {
   over()   { beep(500, 120, 0.8, 'triangle', 0.12); },
   win()    { beep(520, 1040, 0.25, 'sine', 0.1); setTimeout(() => beep(660, 1320, 0.3, 'sine', 0.1), 130); }
 };
+
+/* ---------- hebrew voice — reads missions to a kid who can't read yet ---------- */
+let heVoice = null;
+function pickVoice() {
+  try {
+    const vs = speechSynthesis.getVoices();
+    heVoice = vs.find(v => v.lang && v.lang.toLowerCase().startsWith('he')) || null;
+  } catch (e) {}
+}
+if ('speechSynthesis' in window) {
+  pickVoice();
+  try { speechSynthesis.onvoiceschanged = pickVoice; } catch (e) {}
+}
+function speak(text) {
+  if (muted || !('speechSynthesis' in window)) return;
+  try {
+    speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(text);
+    u.lang = 'he-IL';
+    if (heVoice) u.voice = heVoice;
+    u.rate = 0.95;
+    u.pitch = 1.05;
+    speechSynthesis.speak(u);
+  } catch (e) {}
+}
+function stopSpeak() {
+  try { if ('speechSynthesis' in window) speechSynthesis.cancel(); } catch (e) {}
+}
 
 /* ---------- background music (light synth loop) ---------- */
 let musicTimer = null, musicStep = 0;
@@ -690,12 +737,12 @@ function pickName(n) {
 /* ---------- screens ---------- */
 const screens = {
   home: $('home'), namePick: $('namePick'), pauseScr: $('pauseScr'), overScr: $('overScr'),
-  stableScr: $('stableScr'), duelMid: $('duelMid'), duelEnd: $('duelEnd')
+  stableScr: $('stableScr'), duelMid: $('duelMid'), duelEnd: $('duelEnd'), levelScr: $('levelScr')
 };
 function show(name) {
   Object.entries(screens).forEach(([k, el]) => el.classList.toggle('hidden', k !== name));
   $('hud').classList.toggle('hidden', !(name === 'none' || name === 'pauseScr'));
-  if (name === 'home') { refreshBest(); refreshWallet(); }
+  if (name === 'home') { refreshBest(); refreshWallet(); refreshLevelChip(); }
 }
 
 /* ---------- wallet & stable (shop) ---------- */
@@ -781,7 +828,30 @@ const BIOMES = [
     deco: 'night', celestial: 'moon'
   }
 ];
-function biomeAt(dist) { return Math.floor(dist / BIOME_LEN) % BIOMES.length; }
+function biomeAt(dist) {
+  if (G && G.fixedBiome != null) return G.fixedBiome; // level mode: one world per level
+  return Math.floor(dist / BIOME_LEN) % BIOMES.length;
+}
+
+/* ---------- levels ---------- */
+let curLevel = parseInt(store.get('mh_level', '1'), 10) || 1;
+function levelCfg(lvl) {
+  const biome = (lvl - 1) % BIOMES.length;
+  const missions = [
+    { type: 'stars', target: 8 + lvl * 2, label: n => 'לאסוף ' + n + ' כוכבים ⭐', say: n => 'לאסוף ' + n + ' כוכבים' },
+    { type: 'lava',  target: 2 + Math.ceil(lvl / 2), label: n => 'לעבור ' + n + ' בריכות לבה 🔥', say: n => 'לעבור ' + n + ' בריכות לבה בלי ליפול' },
+    { type: 'fly',   target: 4 + lvl, label: n => 'לעוף ' + n + ' שניות 🪽', say: n => 'לעוף ' + n + ' שניות עם הכנפיים' }
+  ];
+  return {
+    len: Math.min(300 + lvl * 60, 900),
+    biome: biome,
+    mission: missions[(lvl - 1) % missions.length],
+    baseSpeed: Math.min(225 + lvl * 6, 320)
+  };
+}
+function refreshLevelChip() {
+  $('levelChip').textContent = '🎮 שלב ' + curLevel + ' · ' + BIOMES[(curLevel - 1) % BIOMES.length].emoji;
+}
 /* blend info: current biome, next biome, blend t (0 = fully current) */
 function biomeBlend(dist) {
   const p = dist / BIOME_LEN;
@@ -809,11 +879,29 @@ let state = ST.HOME;
 let rider = 'shila';
 
 const G = {};
+let nextMode = 'level'; // 'level' | 'duel'
 function resetGame() {
+  G.mode = nextMode;
+  if (G.mode === 'level') {
+    const cfg = levelCfg(curLevel);
+    G.fixedBiome = cfg.biome;
+    G.levelLen = cfg.len;
+    G.baseSpeed = cfg.baseSpeed;
+    G.levelMission = cfg.mission;
+  } else {
+    G.fixedBiome = null;
+    G.levelLen = 0;
+    G.baseSpeed = 240;
+    G.levelMission = null;
+  }
+  G.levelDone = false;
+  G.lvlBonusDone = false;
+  G.lvlGoldDone = false;
+  G.heartsLost = 0;
   G.dist = 0;
   G.stars = 0;
   G.hearts = 3;
-  G.speed = 240;
+  G.speed = G.baseSpeed;
   G.bonus = 0;
   G.t = 0;
   G.x = 0;
@@ -852,10 +940,10 @@ function resetGame() {
   G.sincePower = 0;
   G.lastMilestone = 0;
   G.lastBiome = 0;
-  // quests
+  // quests: level mode = one spoken mission; duel = rotating chain
   G.qRound = 0;
   G.qIdx = 0;
-  G.quests = questList(0);
+  G.quests = G.mode === 'level' ? [G.levelMission] : questList(0);
   G.qProg = 0;
   G.qFly = 0;
   G.qDone = false;
@@ -894,6 +982,7 @@ function questProgress(type, amount) {
     snd.quest();
     spawnConfetti(40, W / 2, H * 0.35);
     announce('המשימה הושלמה! 🎉 +50', '#7bf07b', 36);
+    speak('כל הכבוד! המשימה הושלמה!');
     const chip = $('questChip');
     chip.classList.add('done');
     chip.textContent = '🎉 המשימה הושלמה! +50 נקודות';
@@ -908,6 +997,7 @@ $('btnMute').addEventListener('click', () => {
   muted = !muted;
   store.set('mh_muted', muted ? '1' : '0');
   $('btnMute').textContent = muted ? '🔇' : '🔊';
+  if (muted) stopSpeak();
 });
 $('btnPause').addEventListener('click', () => {
   if (state === ST.PLAY) { state = ST.PAUSE; clearInput(); stopMusic(); show('pauseScr'); }
@@ -922,23 +1012,33 @@ function goHome() {
   state = ST.HOME;
   clearInput();
   stopMusic();
+  stopSpeak();
   show('home');
 }
 
 /* ---------- start flow ---------- */
-$('cardDad').addEventListener('click', () => { initAudio(); duel = null; rider = 'dad'; show('none'); startCountdown(); });
+$('cardDad').addEventListener('click', () => { initAudio(); duel = null; nextMode = 'level'; rider = 'dad'; show('none'); startCountdown(); });
 $('cardShila').addEventListener('click', () => {
   initAudio();
   duel = null;
+  nextMode = 'level';
   rider = 'shila';
   if (!shilaHorse) { show('namePick'); return; }
   show('none'); startCountdown();
+});
+$('btnNextLevel').addEventListener('click', () => { show('none'); startCountdown(); });
+$('btnLvlHome').addEventListener('click', goHome);
+$('questChip').addEventListener('click', () => {
+  // a pre-reader taps the chip to hear the mission again
+  const q = currentQuest();
+  if (q) speak('המשימה: ' + (q.say ? q.say(q.target) : q.label(q.target)));
 });
 
 /* ---------- duel: אבא נגד שילה ---------- */
 let duel = null, pendingDuel = false;
 function startDuel() {
   duel = { scores: {}, i: 0 };
+  nextMode = 'duel';
   rider = 'shila';
   show('none');
   startCountdown();
@@ -994,6 +1094,12 @@ function startCountdown(resume) {
     cd.classList.add('pop');
   };
   startMusic();
+  if (!resume && G.mode === 'level') {
+    const b = BIOMES[G.fixedBiome % BIOMES.length];
+    const q = currentQuest();
+    speak('שלב ' + curLevel + '. ' + b.name + '. המשימה: ' + (q.say ? q.say(q.target) : q.label(q.target)));
+    announceBiome(G.fixedBiome);
+  }
   showNum(n);
   beep(440, 440, 0.15, 'sine', 0.1);
   clearInterval(countTimer);
@@ -1181,6 +1287,7 @@ function loseHeart(kind) {
     return;
   }
   G.hearts--;
+  G.heartsLost++;
   G.inv = 2.2;
   G.shake = 0.4;
   G.slowmo = 0.45; // brief slow-motion so a young player sees what happened
@@ -1204,11 +1311,21 @@ function endGame() {
   wallet += G.stars;
   saveShop();
   refreshWallet();
+  if (duel) { finishDuelRound(score); return; }
+  if (G.mode === 'level') {
+    // level failed — gentle retry
+    $('overEmoji').textContent = '🤗';
+    $('overTitle').textContent = 'לא נורא!';
+    $('overScore').innerHTML = 'שלב ' + curLevel + ' עוד מחכה לך<br>⭐ ' + G.stars + ' כוכבים בכל זאת נכנסו לארנק!';
+    $('overBest').textContent = 'מנסים עוד פעם? 💪';
+    speak('לא נורא! מנסים עוד פעם!');
+    setTimeout(() => show('overScr'), 700);
+    return;
+  }
   const bestKey = 'mh_best_' + rider;
   const best = parseInt(store.get(bestKey, '0'), 10) || 0;
   const isRecord = score > best;
   if (isRecord) store.set(bestKey, String(score));
-  if (duel) { finishDuelRound(score); return; }
   const name = rider === 'dad' ? 'אבא וסייחי' : ('שילה ו' + (shilaHorse || 'הסוס'));
   $('overEmoji').textContent = isRecord ? '🥇' : '🏆';
   $('overTitle').textContent = isRecord ? 'שיא חדש! 🎉' : 'כל הכבוד!';
@@ -1219,6 +1336,40 @@ function endGame() {
   setTimeout(() => show('overScr'), 700);
 }
 
+/* ---------- level complete ---------- */
+function levelComplete() {
+  if (G.levelDone) return;
+  G.levelDone = true;
+  state = ST.OVER;
+  clearInput();
+  stopMusic();
+  wallet += G.stars;
+  saveShop();
+  refreshWallet();
+  const missionDone = G.qDone;
+  const rating = 1 + (missionDone ? 1 : 0) + (G.heartsLost === 0 ? 1 : 0);
+  const lvl = curLevel;
+  const skey = 'mh_lvlstars_' + lvl;
+  const prev = parseInt(store.get(skey, '0'), 10) || 0;
+  if (rating > prev) store.set(skey, String(rating));
+  curLevel = Math.max(curLevel, lvl + 1);
+  store.set('mh_level', String(curLevel));
+  refreshLevelChip();
+  snd.win();
+  spawnConfetti(80, W / 2, H * 0.3);
+  $('lvlTitle').textContent = 'שלב ' + lvl + ' הושלם! 🎉';
+  $('lvlScore').innerHTML = '⭐ ' + G.stars + ' כוכבים נכנסו לארנק' +
+    (missionDone ? '<br>🎯 המשימה הושלמה!' : '') +
+    (G.heartsLost === 0 ? '<br>❤️ בלי פגיעה אחת!' : '');
+  ['ls1', 'ls2', 'ls3'].forEach((id, i) => {
+    const el = $(id);
+    el.classList.remove('on');
+    setTimeout(() => { if (i < rating) { el.classList.add('on'); beep(660 + i * 160, 660 + i * 160, 0.2, 'sine', 0.1); } }, 500 + i * 480);
+  });
+  speak('כל הכבוד! סיימת את שלב ' + lvl + '! קיבלת ' + rating + ' כוכבי זהב!');
+  setTimeout(() => show('levelScr'), 600);
+}
+
 /* ---------- bonus stage ---------- */
 let bonusFlip = 0;
 function startBonus() {
@@ -1226,6 +1377,7 @@ function startBonus() {
   const type = (bonusFlip++ % 2 === 0) ? 'starRain' : 'ringTunnel';
   G.bonusStage = { type: type, t: 0, dur: 8.5, startStars: G.stars };
   announce(type === 'starRain' ? '🎁 בונוס! גשם כוכבים!' : '🎁 בונוס! מנהרת הקשת!', '#ffd94d', 40);
+  speak(type === 'starRain' ? 'בונוס! גשם כוכבים! תאסוף כמה שיותר!' : 'בונוס! תעוף דרך הטבעות של הקשת!');
   snd.quest();
   // clear the road: no hazards during the bonus
   G.obstacles = G.obstacles.filter(o => o.x + o.w - G.x < horseX());
@@ -1251,7 +1403,8 @@ function update(dt) {
   if (state !== ST.PLAY) return;
 
   G.t += dt;
-  G.speed = Math.min(240 + G.dist * 0.35, 470);
+  const spCap = G.mode === 'level' ? G.baseSpeed + 150 : 470;
+  G.speed = Math.min((G.baseSpeed || 240) + G.dist * 0.35, spCap);
   const boostMul = G.boost > 0 ? 1.45 : 1;
   const sp = G.speed * U * boostMul;
   G.x += sp * dt;
@@ -1263,12 +1416,26 @@ function update(dt) {
   G.squash *= Math.max(0, 1 - dt * 5);
   if (G.comboTimer > 0) { G.comboTimer -= dt; if (G.comboTimer <= 0) G.combo = 0; }
 
-  // biome change → banner, then a bonus stage
-  const bi = biomeAt(G.dist);
-  if (bi !== G.lastBiome) {
-    G.lastBiome = bi;
-    announceBiome(bi);
-    G.bonusPending = 1.4;
+  if (G.mode === 'level') {
+    // level beats: bonus at halfway, gold chase at 30%, finish line at the end
+    const prog = G.dist / G.levelLen;
+    if (!G.lvlBonusDone && prog > 0.5) { G.lvlBonusDone = true; G.bonusPending = 0.3; }
+    if (!G.lvlGoldDone && prog > 0.28 && !G.bonusStage) {
+      G.lvlGoldDone = true;
+      G.gold = { x: G.x + W + 60 * U, t: 0, dur: 7 };
+      announce('✨ תפוס את הארנב-דג הזהוב!', '#ffd24d', 34);
+      speak('תפוס את הארנב דג הזהוב!');
+      snd.power();
+    }
+    if (G.dist >= G.levelLen) { levelComplete(); return; }
+  } else {
+    // endless (duel): biome change → banner, then a bonus stage
+    const bi = biomeAt(G.dist);
+    if (bi !== G.lastBiome) {
+      G.lastBiome = bi;
+      announceBiome(bi);
+      G.bonusPending = 1.4;
+    }
   }
   // milestones
   if (Math.floor(G.dist / 100) > G.lastMilestone) {
@@ -1308,11 +1475,12 @@ function update(dt) {
     }
   }
 
-  // golden catch — mid-biome chase
-  if (!G.bonusStage && !G.gold && Math.floor((G.dist + 110) / BIOME_LEN) > G.lastGold && G.dist > 100) {
+  // golden catch — mid-biome chase (endless mode)
+  if (G.mode !== 'level' && !G.bonusStage && !G.gold && Math.floor((G.dist + 110) / BIOME_LEN) > G.lastGold && G.dist > 100) {
     G.lastGold = Math.floor((G.dist + 110) / BIOME_LEN);
     G.gold = { x: G.x + W + 60 * U, t: 0, dur: 7 };
     announce('✨ תפוס את הארנב-דג הזהוב!', '#ffd24d', 34);
+    speak('תפוס את הארנב דג הזהוב!');
     snd.power();
   }
   if (G.gold) {
@@ -1336,16 +1504,18 @@ function update(dt) {
       G.gold = null;
     }
   }
-  // quest advance (game-time, freezes on pause)
+  // quest advance (game-time, freezes on pause); level mode keeps its single mission
   if (G.qDone) {
-    G.qAdvT -= dt;
-    if (G.qAdvT <= 0) {
-      G.qIdx++;
-      if (G.qIdx % G.quests.length === 0) { G.qRound++; G.quests = questList(G.qRound); }
-      G.qProg = 0;
-      G.qDone = false;
-      G.qStartDist = G.dist; // dist quests count meters from activation
-      updateQuestChip();
+    if (G.mode !== 'level') {
+      G.qAdvT -= dt;
+      if (G.qAdvT <= 0) {
+        G.qIdx++;
+        if (G.qIdx % G.quests.length === 0) { G.qRound++; G.quests = questList(G.qRound); }
+        G.qProg = 0;
+        G.qDone = false;
+        G.qStartDist = G.dist; // dist quests count meters from activation
+        updateQuestChip();
+      }
     }
   } else if (currentQuest().type === 'dist') {
     questProgress('dist', (G.dist - G.qStartDist) - G.qProg);
@@ -1600,9 +1770,11 @@ function draw() {
   drawAmbientFront();
   drawConfetti();
   drawFloaties();
+  drawFinishGate();
   ctx.restore();
 
   drawVignette();
+  drawLevelProgress();
   drawBonusFx();
   drawAnnounce();
 }
@@ -2176,6 +2348,64 @@ function drawFloaties() {
   }
   ctx.globalAlpha = 1;
 }
+/* ---------- finish gate + level progress ---------- */
+function drawFinishGate() {
+  if (G.mode !== 'level' || state === ST.HOME) return;
+  const remainPx = (G.levelLen - G.dist) * 34 * U;
+  if (remainPx > W * 1.3) return;
+  const gx = horseX() + remainPx;
+  const gy = groundY();
+  const ph = 150 * U;
+  // rainbow arch
+  for (let i = 0; i < RING_COLS.length; i++) {
+    ctx.strokeStyle = RING_COLS[i];
+    ctx.lineWidth = 7 * U;
+    ctx.beginPath();
+    ctx.arc(gx, gy, ph - i * 8 * U, Math.PI, 0);
+    ctx.stroke();
+  }
+  // poles + flags
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(gx - ph - 6 * U, gy - ph, 9 * U, ph);
+  ctx.fillRect(gx + ph - 3 * U, gy - ph, 9 * U, ph);
+  ctx.font = Math.round(30 * U) + 'px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText('🏁', gx - ph, gy - ph - 14 * U);
+  ctx.fillText('🏁', gx + ph, gy - ph - 14 * U);
+  // checkered strip on the path
+  const sq = 10 * U;
+  for (let r = 0; r < 2; r++) {
+    for (let c = -4; c < 4; c++) {
+      ctx.fillStyle = (r + c) % 2 === 0 ? '#fff' : '#333';
+      ctx.fillRect(gx + c * sq, gy + r * sq, sq, sq);
+    }
+  }
+}
+function drawLevelProgress() {
+  if (G.mode !== 'level' || state === ST.HOME || state === ST.OVER) return;
+  const k = clamp(G.dist / G.levelLen, 0, 1);
+  const bw2 = W * 0.42, bx2 = W / 2 - bw2 / 2, by2 = H * 0.2;
+  ctx.fillStyle = 'rgba(10,5,35,.45)';
+  ctx.beginPath();
+  ctx.roundRect ? ctx.roundRect(bx2 - 4 * U, by2 - 4 * U, bw2 + 8 * U, 14 * U, 8 * U) : ctx.rect(bx2 - 4 * U, by2 - 4 * U, bw2 + 8 * U, 14 * U);
+  ctx.fill();
+  const fg = ctx.createLinearGradient(bx2, 0, bx2 + bw2, 0);
+  fg.addColorStop(0, '#7bf07b');
+  fg.addColorStop(1, '#ffd94d');
+  ctx.fillStyle = fg;
+  ctx.beginPath();
+  ctx.roundRect ? ctx.roundRect(bx2, by2, bw2 * k, 6 * U, 4 * U) : ctx.rect(bx2, by2, bw2 * k, 6 * U);
+  ctx.fill();
+  // rider dot + finish flag
+  ctx.font = Math.round(15 * U) + 'px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText('🏁', bx2 + bw2 + 12 * U, by2 + 8 * U);
+  ctx.fillStyle = '#fff';
+  ctx.beginPath(); ctx.arc(bx2 + bw2 * k, by2 + 3 * U, 7 * U, 0, 7); ctx.fill();
+  ctx.font = Math.round(11 * U) + 'px sans-serif';
+  ctx.fillText('🐴', bx2 + bw2 * k, by2 + 4 * U);
+}
+
 /* ---------- announce banner (queued, never overlaps) ---------- */
 function drawAnnounce() {
   const a = G.announce;
@@ -2214,11 +2444,11 @@ function drawBonusFx() {
   const bw2 = W * 0.4 * frac;
   ctx.fillStyle = 'rgba(0,0,0,.35)';
   ctx.beginPath();
-  ctx.roundRect ? ctx.roundRect(W / 2 - W * 0.2, H * 0.155, W * 0.4, 8 * U, 5 * U) : ctx.rect(W / 2 - W * 0.2, H * 0.155, W * 0.4, 8 * U);
+  ctx.roundRect ? ctx.roundRect(W / 2 - W * 0.2, H * 0.25, W * 0.4, 8 * U, 5 * U) : ctx.rect(W / 2 - W * 0.2, H * 0.25, W * 0.4, 8 * U);
   ctx.fill();
   ctx.fillStyle = '#ffd94d';
   ctx.beginPath();
-  ctx.roundRect ? ctx.roundRect(W / 2 - bw2 / 2, H * 0.155, bw2, 8 * U, 5 * U) : ctx.rect(W / 2 - bw2 / 2, H * 0.155, bw2, 8 * U);
+  ctx.roundRect ? ctx.roundRect(W / 2 - bw2 / 2, H * 0.25, bw2, 8 * U, 5 * U) : ctx.rect(W / 2 - bw2 / 2, H * 0.25, bw2, 8 * U);
   ctx.fill();
 }
 
