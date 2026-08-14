@@ -578,6 +578,7 @@
       </div>
       <div class="kpi-grid" id="ecomGrid"></div>
       <div id="ecomNote" style="display:none;margin-top:.9rem;font-size:.78rem;color:var(--ink-mute);line-height:1.6;"></div>
+      <div id="ecomSources" style="display:none;margin-top:.9rem;"></div>
       <div id="ecomChannels" style="display:none;margin-top:.9rem;"></div>
     </div>
 
@@ -1011,15 +1012,17 @@
         '</div>';
     }).join("");
 
-    var srcEl  = document.getElementById("ecomSource");
-    var noteEl = document.getElementById("ecomNote");
-    var chEl   = document.getElementById("ecomChannels");
-    if (!srcEl || !noteEl || !chEl) return;
+    var srcEl   = document.getElementById("ecomSource");
+    var noteEl  = document.getElementById("ecomNote");
+    var chEl    = document.getElementById("ecomChannels");
+    var srcEl2  = document.getElementById("ecomSources");
+    if (!srcEl || !noteEl || !chEl || !srcEl2) return;
 
     if (!useShopify) {
       srcEl.textContent = "Google Analytics";
       noteEl.style.display = "none";
       chEl.style.display = "none";
+      srcEl2.style.display = "none";
       return;
     }
 
@@ -1032,24 +1035,36 @@
     noteEl.innerHTML = noteParts.join(" ");
     noteEl.style.display = "block";
 
-    var channels = Object.keys(shop.byChannel || {}).sort(function (a, b) {
-      return shop.byChannel[b].revenue - shop.byChannel[a].revenue;
-    });
-    if (!channels.length) { chEl.style.display = "none"; return; }
+    renderShopBreakdown(srcEl2, shop.bySource, "מאיפה הגיעו", "מקור", shop.revenue);
+    renderShopBreakdown(chEl, shop.byChannel, "לפי ערוץ מכירה", "ערוץ", 0);
+  }
 
-    chEl.innerHTML =
-      '<div class="kpi-label" style="margin-bottom:.5rem;">לפי ערוץ מכירה</div>' +
+  // Revenue split table — used for both traffic source and sales channel.
+  // Pass a total to show each row's share of it.
+  function renderShopBreakdown(el, data, title, colLabel, total) {
+    if (!el) return;
+    var names = Object.keys(data || {}).sort(function (a, b) {
+      return data[b].revenue - data[a].revenue;
+    });
+    if (!names.length) { el.style.display = "none"; return; }
+
+    el.innerHTML =
+      '<div class="kpi-label" style="margin-bottom:.5rem;">' + esc(title) + '</div>' +
       '<table class="data-table"><thead><tr>' +
-        '<th>ערוץ</th><th>הזמנות</th><th>הכנסה</th>' +
+        '<th>' + esc(colLabel) + '</th><th>הזמנות</th><th>הכנסה</th>' +
+        (total ? '<th>חלק</th>' : '') +
       '</tr></thead><tbody>' +
-      channels.map(function (name) {
-        var c = shop.byChannel[name];
+      names.map(function (name) {
+        var c = data[name];
+        var share = total ? Math.round((c.revenue / total) * 100) + "%" : "";
         return '<tr><td>' + esc(name) + '</td>' +
           '<td class="cell-mono">' + num(c.orders) + '</td>' +
-          '<td class="cell-mono">' + rev(c.revenue) + '</td></tr>';
+          '<td class="cell-mono">' + rev(c.revenue) + '</td>' +
+          (total ? '<td class="cell-mono">' + share + '</td>' : '') +
+          '</tr>';
       }).join("") +
       '</tbody></table>';
-    chEl.style.display = "block";
+    el.style.display = "block";
   }
 
   // ── Shopify Leads ─────────────────────────
