@@ -574,9 +574,11 @@
     <div class="section" id="ecomSection" style="display:none;">
       <div class="section-header">
         <span class="section-title">מסחר אלקטרוני</span>
-        <span class="section-source">Google Analytics</span>
+        <span class="section-source" id="ecomSource">Google Analytics</span>
       </div>
       <div class="kpi-grid" id="ecomGrid"></div>
+      <div id="ecomNote" style="display:none;margin-top:.9rem;font-size:.78rem;color:var(--ink-mute);line-height:1.6;"></div>
+      <div id="ecomChannels" style="display:none;margin-top:.9rem;"></div>
     </div>
 
     <!-- GA4 — Sources + channel performance -->
@@ -757,7 +759,7 @@
         "עודכן " + t.toLocaleTimeString("he-IL", { hour: "2-digit", minute: "2-digit" });
     }
     if (d.ga4)      renderGA4(d.ga4);
-    if (d.ga4 && d.ga4.ecommerce) renderEcommerce(d.ga4.ecommerce);
+    if (d.ga4 && d.ga4.ecommerce) renderEcommerce(d.ga4.ecommerce, d.shopifyOrders);
     if (d.shopify)  renderShopify(d.shopify);
     if (d.facebook) renderFacebook(d.facebook);
   }
@@ -969,17 +971,36 @@
   }
 
   // ── E-Commerce ────────────────────────────
-  function renderEcommerce(ec) {
+  // Behaviour metrics (product views, add to cart) come from GA4.
+  // Orders and revenue come from Shopify when available — GA4 misses any buyer
+  // whose browser blocks it, so its revenue is not a number we can report.
+  function renderEcommerce(ec, so) {
     if (!ec) return;
     document.getElementById("ecomSection").style.display = "block";
 
+    // The API returns either {current, previous} or a bare object (older deploys).
+    var shop     = so && so.current ? so.current  : so;
+    var shopPrev = so && so.previous ? so.previous : null;
+    var useShopify = !!(shop && typeof shop.revenue === "number");
+
     var cards = [
-      { label: "הוספה לסל",    cur: (ec.addToCart  ||{}).current||0, prev: (ec.addToCart  ||{}).previous||0, fmt: num },
-      { label: "צפייה במוצר", cur: (ec.viewItem   ||{}).current||0, prev: (ec.viewItem   ||{}).previous||0, fmt: num },
-      { label: "הרשמות",      cur: (ec.formSubmit ||{}).current||0, prev: (ec.formSubmit ||{}).previous||0, fmt: num },
-      { label: "רכישות",      cur: (ec.purchases  ||{}).current||0, prev: (ec.purchases  ||{}).previous||0, fmt: num },
-      { label: "סה״כ מכירות",    cur: ec.revenue.current,         prev: ec.revenue.previous,        fmt: rev },
+      { label: "הוספה לסל",    cur: (ec.addToCart ||{}).current||0, prev: (ec.addToCart ||{}).previous||0, fmt: num },
+      { label: "צפייה במוצר", cur: (ec.viewItem  ||{}).current||0, prev: (ec.viewItem  ||{}).previous||0, fmt: num },
+      { label: "הרשמות",      cur: (ec.formSubmit||{}).current||0, prev: (ec.formSubmit||{}).previous||0, fmt: num },
     ];
+
+    if (useShopify) {
+      cards.push(
+        { label: "הזמנות",     cur: shop.orders,  prev: shopPrev ? shopPrev.orders  : 0, fmt: num },
+        { label: "סה״כ מכירות", cur: shop.revenue, prev: shopPrev ? shopPrev.revenue : 0, fmt: rev },
+        { label: "ממוצע להזמנה", cur: shop.aov,   prev: shopPrev ? shopPrev.aov     : 0, fmt: rev }
+      );
+    } else {
+      cards.push(
+        { label: "רכישות",     cur: (ec.purchases||{}).current||0, prev: (ec.purchases||{}).previous||0, fmt: num },
+        { label: "סה״כ מכירות", cur: ec.revenue.current,           prev: ec.revenue.previous,           fmt: rev }
+      );
+    }
 
     document.getElementById("ecomGrid").innerHTML = cards.map(function (c) {
       var d = delta(c.cur, c.prev, false);
@@ -989,6 +1010,46 @@
         '<div class="kpi-delta ' + d.cls + '">' + d.txt + '</div>' +
         '</div>';
     }).join("");
+
+    var srcEl  = document.getElementById("ecomSource");
+    var noteEl = document.getElementById("ecomNote");
+    var chEl   = document.getElementById("ecomChannels");
+    if (!srcEl || !noteEl || !chEl) return;
+
+    if (!useShopify) {
+      srcEl.textContent = "Google Analytics";
+      noteEl.style.display = "none";
+      chEl.style.display = "none";
+      return;
+    }
+
+    srcEl.textContent = "Shopify · Google Analytics";
+
+    var noteParts = ["הזמנות והכנסות נלקחים מ‑Shopify. התנהגות באתר מ‑Google Analytics."];
+    if (shop.freeOrders) {
+      noteParts.push("לא נכללות " + num(shop.freeOrders) + " הזמנות בסך 0$ (ערכות דמו ולידים).");
+    }
+    noteEl.innerHTML = noteParts.join(" ");
+    noteEl.style.display = "block";
+
+    var channels = Object.keys(shop.byChannel || {}).sort(function (a, b) {
+      return shop.byChannel[b].revenue - shop.byChannel[a].revenue;
+    });
+    if (!channels.length) { chEl.style.display = "none"; return; }
+
+    chEl.innerHTML =
+      '<div class="kpi-label" style="margin-bottom:.5rem;">לפי ערוץ מכירה</div>' +
+      '<table class="data-table"><thead><tr>' +
+        '<th>ערוץ</th><th>הזמנות</th><th>הכנסה</th>' +
+      '</tr></thead><tbody>' +
+      channels.map(function (name) {
+        var c = shop.byChannel[name];
+        return '<tr><td>' + esc(name) + '</td>' +
+          '<td class="cell-mono">' + num(c.orders) + '</td>' +
+          '<td class="cell-mono">' + rev(c.revenue) + '</td></tr>';
+      }).join("") +
+      '</tbody></table>';
+    chEl.style.display = "block";
   }
 
   // ── Shopify Leads ─────────────────────────
