@@ -582,6 +582,16 @@
       <div id="ecomChannels" style="display:none;margin-top:.9rem;"></div>
     </div>
 
+    <!-- Leads -->
+    <div class="section" id="leadsSection" style="display:none;">
+      <div class="section-header">
+        <span class="section-title">לידים</span>
+        <span class="section-source">Shopify · Google Analytics</span>
+      </div>
+      <div class="kpi-grid" id="leadsGrid"></div>
+      <div id="leadsNote" style="margin-top:.9rem;font-size:.78rem;color:var(--ink-mute);line-height:1.6;"></div>
+    </div>
+
     <!-- GA4 — Sources + channel performance -->
     <div class="section">
       <div class="section-header">
@@ -761,6 +771,7 @@
     }
     if (d.ga4)      renderGA4(d.ga4);
     if (d.ga4 && d.ga4.ecommerce) renderEcommerce(d.ga4.ecommerce, d.shopifyOrders);
+    renderLeads(d.leads, d.ga4 && d.ga4.ecommerce);
     if (d.shopify)  renderShopify(d.shopify);
     if (d.facebook) renderFacebook(d.facebook);
   }
@@ -1067,6 +1078,51 @@
     el.style.display = "block";
   }
 
+  // ── Leads ─────────────────────────────────
+  // Every stream that actually produces a lead, from the source that sees it.
+  // GA4 only sees its own form_submit and misses anyone blocking it, so the
+  // newsletter and Pro Club numbers come from Shopify instead.
+  function renderLeads(leads, ec) {
+    var sec = document.getElementById("leadsSection");
+    if (!sec || !leads) return;
+    sec.style.display = "block";
+
+    var formCur  = ((ec || {}).formSubmit || {}).current  || 0;
+    var formPrev = ((ec || {}).formSubmit || {}).previous || 0;
+
+    var cards = [
+      { label: "הרשמות באתר", cur: formCur, prev: formPrev, fmt: num, delta: true },
+      { label: "נרשמו לניוזלטר", cur: leads.newsletter || 0, fmt: num },
+      { label: "ערכות דמו", cur: leads.demoKits || 0, fmt: num },
+      { label: "חברי Pro Club", cur: leads.proClub || 0, fmt: num }
+    ];
+
+    document.getElementById("leadsGrid").innerHTML = cards.map(function (c) {
+      var foot = "מצטבר";
+      if (c.delta) {
+        var d = delta(c.cur, c.prev, false);
+        foot = '<span class="' + d.cls + '">' + d.txt + '</span>';
+      } else if (c.label === "חברי Pro Club") {
+        foot = "סה״כ";
+      } else {
+        foot = "בטווח";
+      }
+      return '<div class="kpi-card">' +
+        '<div class="kpi-label">' + c.label + '</div>' +
+        '<div class="kpi-value">' + c.fmt(c.cur) + '</div>' +
+        '<div class="kpi-delta">' + foot + '</div>' +
+        '</div>';
+    }).join("");
+
+    var note = "רק “הרשמות באתר” מגיע מ‑Google Analytics, ולכן הוא מפספס כל מי " +
+      "שחוסם אותו. השאר מגיע מ‑Shopify.";
+    if (leads.newsletterTotal) {
+      note += " סה”כ נרשמים לניוזלטר: " + num(leads.newsletterTotal) + ".";
+    }
+    note += " ערכות דמו הן הזמנות ב‑0$ — לידים, לא הכנסה, ולכן הן לא נספרות במכירות.";
+    document.getElementById("leadsNote").innerHTML = note;
+  }
+
   // ── Shopify Leads ─────────────────────────
   function renderShopify(sh) {
     var pro  = sh.pro        || { total: 0, newMonth: 0, recent: [] };
@@ -1281,6 +1337,7 @@
   document.getElementById("periodSelect").addEventListener("change", function (e) {
     currentMode = e.target.value;
     document.getElementById("ecomSection").style.display = "none";
+    document.getElementById("leadsSection").style.display = "none";
     document.getElementById("loadingEl").style.display = "flex";
     document.getElementById("dash").style.display = "none";
     load(false, currentMode);
