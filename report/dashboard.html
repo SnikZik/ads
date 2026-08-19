@@ -565,6 +565,7 @@
         <span class="section-source">Google Analytics</span>
       </div>
       <div class="kpi-grid" id="kpiGrid"></div>
+      <div id="freshNote" style="display:none;margin-top:.9rem;font-size:.78rem;color:var(--ink-mute);line-height:1.6;"></div>
       <div class="sparkline-wrap">
         <canvas id="sparkChart"></canvas>
       </div>
@@ -609,7 +610,7 @@
             <thead>
               <tr>
                 <th>ערוץ</th>
-                <th style="text-align:left;">סשנים</th>
+                <th style="text-align:left;" title="סשנים עם engagement בלבד — לא כל הסשנים">סשנים אמיתיים</th>
                 <th style="text-align:left;">צפ׳ מוצר</th>
                 <th style="text-align:left;">הוספה לסל</th>
                 <th style="text-align:left;color:var(--purple);">הרשמות</th>
@@ -770,10 +771,31 @@
         "עודכן " + t.toLocaleTimeString("he-IL", { hour: "2-digit", minute: "2-digit" });
     }
     if (d.ga4)      renderGA4(d.ga4);
+    renderFreshness(d.config);
     if (d.ga4 && d.ga4.ecommerce) renderEcommerce(d.ga4.ecommerce, d.shopifyOrders);
     renderLeads(d.leads, d.ga4 && d.ga4.ecommerce);
     if (d.shopify)  renderShopify(d.shopify);
     if (d.facebook) renderFacebook(d.facebook);
+  }
+
+  // GA4 counts sessions almost immediately but finishes engagement, sources and
+  // conversions a day or two later. A range ending today or yesterday will show
+  // a lot of sessions against very few engaged ones, and that gap closes on its
+  // own — so say it rather than let it read as a broken report.
+  function renderFreshness(config) {
+    var el = document.getElementById("freshNote");
+    if (!el || !config || !config.endDate) return;
+
+    var today = new Date();
+    var end   = new Date(config.endDate + "T00:00:00");
+    var days  = Math.round((today.setHours(0, 0, 0, 0) - end.getTime()) / 86400000);
+
+    if (days > 1) { el.style.display = "none"; return; }
+
+    el.textContent = "הטווח מסתיים " + (days <= 0 ? "היום" : "אתמול") +
+      ". ב‑Google Analytics ספירת הסשנים מתעדכנת מיד, אבל engagement, מקורות " +
+      "והמרות מתייצבים רק אחרי יום‑יומיים — לכן היחס ביניהם עדיין לא סופי.";
+    el.style.display = "block";
   }
 
   // ── GA4 ───────────────────────────────────
@@ -796,16 +818,28 @@
       { label: "זמן ממוצע",             key: "avgSessionDuration", fmt: dur,  curVal: cur.avgSessionDuration || 0, prevVal: prev.avgSessionDuration || 0 },
     ];
 
+    // Average time is engagement time divided by engaged sessions. On a handful
+    // of sessions one visitor moves it by hundreds of percent, so below this
+    // many the swing is noise and we say so instead of printing it.
+    var MIN_TIME_BASIS = 5;
+
     document.getElementById("kpiGrid").innerHTML = cards.map(function (c) {
-      var d = delta(c.curVal, c.prevVal, c.inv);
-      var sub = "";
+      var d      = delta(c.curVal, c.prevVal, c.inv);
+      var deltaH = '<div class="kpi-delta ' + d.cls + '">' + d.txt + '</div>';
+      var sub    = "";
+
       if (c.key === "avgSessionDuration") {
-        sub = '<div style="font-family:var(--font-mono);font-size:.68rem;color:var(--purple);margin-top:.4rem;letter-spacing:.02em;line-height:1.3;font-weight:600;">בסיס: ' + num(engSess) + ' סשנים אמיתיים</div>';
+        var thin = engSess < MIN_TIME_BASIS;
+        if (thin) deltaH = '<div class="kpi-delta">בסיס קטן מדי להשוואה</div>';
+        sub = '<div style="font-family:var(--font-mono);font-size:.68rem;color:var(--purple);' +
+              'margin-top:.4rem;letter-spacing:.02em;line-height:1.3;font-weight:600;">בסיס: ' +
+              num(engSess) + ' סשנים אמיתיים</div>';
       }
+
       return '<div class="kpi-card">' +
         '<div class="kpi-label">' + c.label + '</div>' +
         '<div class="kpi-value">' + c.fmt(c.curVal) + '</div>' +
-        '<div class="kpi-delta ' + d.cls + '">' + d.txt + '</div>' +
+        deltaH +
         sub +
         '</div>';
     }).join("");
@@ -893,7 +927,7 @@
                 var formSubmit = ch["form_submit"] || 0;
                 var viewItem   = ch["view_item"]   || 0;
                 var secs       = durationMap[s ? s.label : ""] || 0;
-                var lines      = ["סשנים:   " + num(c.parsed) + " (" + (s ? s.pct : 0) + "%)"];
+                var lines      = ["סשנים אמיתיים: " + num(c.parsed) + " (" + (s ? s.pct : 0) + "%)"];
                 if (formSubmit > 0) lines.push("הרשמות:  " + formSubmit);
                 if (viewItem   > 0) lines.push("צפ׳ מוצר: " + num(viewItem));
                 if (secs       > 0) lines.push("זמן:     " + dur(secs));
